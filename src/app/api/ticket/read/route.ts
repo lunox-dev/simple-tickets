@@ -14,7 +14,8 @@ function formatEntity(e: {
     user: { displayName: string }
     team: { name: string }
   } | null
-}) {
+} | null) {
+  if (!e) return null;
   if (e.team) {
     return { entityId: e.id, name: e.team.name }
   }
@@ -242,9 +243,9 @@ export async function GET(req: NextRequest) {
       type: 'ASSIGN_CHANGE',
       id:   a.id,
       at:   a.assignedAt,
-      from: formatEntity(a.assignedFrom),
-      to:   formatEntity(a.assignedTo),
-      by:   formatEntity(a.assignedBy),
+      from: a.assignedFrom ? formatEntity(a.assignedFrom) : null,
+      to:   a.assignedTo ? formatEntity(a.assignedTo) : null,
+      by:   a.assignedBy ? formatEntity(a.assignedBy) : null,
       read: a.notificationEvent ? (readMap.get(a.notificationEvent.id) ?? false) : false
     })
   }

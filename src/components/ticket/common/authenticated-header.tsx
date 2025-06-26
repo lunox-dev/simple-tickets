@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge"
 import { LogOut, User, Settings, Users } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import type { Session } from 'next-auth'
 
 interface Team {
   userTeamId: number
@@ -43,16 +44,13 @@ interface SessionUser {
 }
 
 interface AuthenticatedHeaderProps {
-  session: {
-    user: SessionUser
-    expires: string
-  }
+  session: Session
 }
 
 export default function AuthenticatedHeader({ session }: AuthenticatedHeaderProps) {
   const [isChangingTeam, setIsChangingTeam] = useState(false)
   const router = useRouter()
-  const user = session.user
+  const user = session.user as SessionUser
 
   const handleSignOut = async () => {
     await signOut({ callbackUrl: "/" })
