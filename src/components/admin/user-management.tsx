@@ -25,6 +25,7 @@ interface User {
   id: number
   displayName: string
   email: string
+  permissions: string[]
   teams: Array<{
     userTeamId: number
     teamName: string | null
@@ -183,7 +184,7 @@ export default function UserManagement() {
       userId: user.id,
       email: user.email,
       displayName: user.displayName,
-      permissions: "", // We don't have permissions in the list response
+      permissions: user.permissions ? user.permissions.join(", ") : "",
       Active: true, // We don't have Active status in the list response
     })
     setEditDialogOpen(true)
@@ -281,6 +282,7 @@ export default function UserManagement() {
                 <TableHead>Display Name</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Teams</TableHead>
+                <TableHead>Permissions</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -307,6 +309,19 @@ export default function UserManagement() {
                               {team.teamName || "Unknown"}
                             </Badge>
                           ))
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {user.permissions && user.permissions.length > 0 ? (
+                          user.permissions.map((perm, idx) => (
+                            <Badge key={idx} variant="outline" className="text-xs">
+                              {perm}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-muted-foreground text-xs">No permissions</span>
                         )}
                       </div>
                     </TableCell>

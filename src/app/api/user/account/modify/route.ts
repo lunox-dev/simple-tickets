@@ -65,7 +65,7 @@ export async function PATCH(req: NextRequest) {
       where: { id: userId },
       data
     })
-    return NextResponse.json({ user }, { status: 200 })
+    return NextResponse.json({ user: { ...user, permissions: user.permissions || [] } }, { status: 200 })
   } catch (err: any) {
     if (err.code === 'P2025') {
       // Record not found
