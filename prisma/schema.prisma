@@ -28,7 +28,7 @@ model User {
 
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
-  Active         Boolean
+  Active         Boolean     @default(true)
 
   emailOtps      EmailOTP[]
 }
@@ -43,7 +43,7 @@ model Team {
   entities                  Entity[]
   createdAt                 DateTime                            @default(now())
   updatedAt                 DateTime                            @updatedAt
-  Active                    Boolean
+  Active                    Boolean                             @default(true)
 }
 
 model UserTeam {
@@ -58,7 +58,9 @@ model UserTeam {
   actingUsers      User[]   @relation("UserActionTeam")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
-  Active           Boolean
+  Active           Boolean  @default(true)
+
+  @@unique([userId, teamId])
 }
 
 /// ──────────────────────────────────────────────────────────────────────────

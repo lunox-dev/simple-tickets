@@ -36,7 +36,21 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // 4. Create UserTeam record
+    // 4. Check if UserTeam already exists
+    const existingUserTeam = await prisma.userTeam.findFirst({
+      where: {
+        userId,
+        teamId,
+      },
+    });
+    if (existingUserTeam) {
+      return NextResponse.json(
+        { error: 'User is already assigned to this team.' },
+        { status: 409 }
+      );
+    }
+
+    // 5. Create UserTeam record
     const newUserTeam = await prisma.userTeam.create({
       data: {
         userId,
@@ -47,19 +61,26 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // 5. Create corresponding Entity record
+    // 6. Create corresponding Entity record
     const newEntity = await prisma.entity.create({
       data: {
         userTeamId: newUserTeam.id,
       },
     })
 
-    // 6. Return success with both records
+    // 7. Return success with both records
     return NextResponse.json(
       { userTeam: newUserTeam, entity: newEntity },
       { status: 201 }
     )
   } catch (err: any) {
+    // Handle unique constraint error from Prisma
+    if (err.code === 'P2002' && err.meta?.target?.includes('userId_teamId')) {
+      return NextResponse.json(
+        { error: 'User is already assigned to this team.' },
+        { status: 409 }
+      );
+    }
     console.error('Error assigning user to team:', err)
     return NextResponse.json(
       { error: 'Failed to assign user to team' },
