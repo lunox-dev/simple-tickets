@@ -1,0 +1,389 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// ──────────────────────────────────────────────────────────────────────────
+/// User & Teams
+/// ──────────────────────────────────────────────────────────────────────────
+
+model User {
+  id                           Int         @id @default(autoincrement())
+  displayName                  String
+  email                        String      @unique
+  userTeams                    UserTeam[]
+  permissions                  String[]
+  actionUserTeam               UserTeam?   @relation("UserActionTeam", fields: [actionUserTeamId], references: [id])
+  actionUserTeamId             Int?
+
+  /// JSON‐based per‐user rule blobs
+  emailNotificationPreferences Json?       @default("{}")
+  smsNotificationPreferences   Json?       @default("{}")
+  notificationRecipients       NotificationRecipient[]
+
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  Active         Boolean
+
+  emailOtps      EmailOTP[]
+}
+
+model Team {
+  id                        Int                                 @id @default(autoincrement())
+  priority                  Int
+  name                      String
+  permissions               String[]
+  userTeams                 UserTeam[]
+  categoryAvailabilities    TicketCategoryAvailabilityTeam[]
+  entities                  Entity[]
+  createdAt                 DateTime                            @default(now())
+  updatedAt                 DateTime                            @updatedAt
+  Active                    Boolean
+}
+
+model UserTeam {
+  id               Int      @id @default(autoincrement())
+  displayPriority  Int
+  user             User     @relation(fields: [userId], references: [id])
+  userId           Int
+  team             Team     @relation(fields: [teamId], references: [id])
+  teamId           Int
+  permissions      String[]
+  entities         Entity[] @relation("EntityUserTeam")
+  actingUsers      User[]   @relation("UserActionTeam")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  Active           Boolean
+}
+
+/// ──────────────────────────────────────────────────────────────────────────
+/// API Keys & Entities
+/// ──────────────────────────────────────────────────────────────────────────
+
+model ApiKey {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  label       String
+  permissions String[]
+  entities    Entity[] @relation("EntityApiKey")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Entity {
+  id                     Int       @id @default(autoincrement())
+
+  // Only one of these should be non-null
+  teamId                 Int?      @unique
+  team                   Team?     @relation(fields: [teamId], references: [id])
+
+  userTeamId             Int?      @unique
+  userTeam               UserTeam? @relation("EntityUserTeam", fields: [userTeamId], references: [id])
+
+  apiKeyId               Int?      @unique
+  apiKey                 ApiKey?   @relation("EntityApiKey", fields: [apiKeyId], references: [id])
+
+  ticketsCreated         Ticket[]                 @relation("CreatedBy")
+  ticketsAssigned        Ticket[]                 @relation("AssignedTo")
+  assignmentChangesFrom  TicketChangeAssignment[] @relation("AssignedFrom")
+  assignmentChangesBy    TicketChangeAssignment[] @relation("AssignedBy")
+  assignmentChangesTo    TicketChangeAssignment[] @relation("AssignedToEntity")
+  priorityChanges        TicketChangePriority[]   @relation("ChangedByPriority")
+  statusChanges          TicketChangeStatus[]     @relation("ChangedByStatus")
+  categoryChanges        TicketChangeCategory[]     @relation("ChangedByCategory")
+  threadsCreated         TicketThread[]
+  defaultAssignCategories TicketCategory[]       @relation("DefaultAssignEntity")
+
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+}
+
+/// ──────────────────────────────────────────────────────────────────────────
+/// Tickets & Changes
+/// ──────────────────────────────────────────────────────────────────────────
+
+model Ticket {
+  id                   Int                       @id @default(autoincrement())
+  title                String
+  createdBy            Entity                    @relation("CreatedBy", fields: [createdById], references: [id])
+  createdById          Int
+  currentAssignedTo    Entity?                   @relation("AssignedTo", fields: [currentAssignedToId], references: [id])
+  currentAssignedToId  Int?
+  currentPriority      TicketPriority            @relation(fields: [currentPriorityId], references: [id])
+  currentPriorityId    Int
+  currentStatus        TicketStatus              @relation(fields: [currentStatusId], references: [id])
+  currentStatusId      Int
+  currentCategory      TicketCategory            @relation(fields: [currentCategoryId], references: [id])
+  currentCategoryId    Int
+  assignmentChanges    TicketChangeAssignment[]
+  priorityChanges      TicketChangePriority[]
+  statusChanges        TicketChangeStatus[]
+  categoryChanges      TicketChangeCategory[]
+  threads              TicketThread[]
+  fieldValues          TicketFieldValue[]
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+}
+
+model TicketChangeAssignment {
+  id                   Int       @id @default(autoincrement())
+  ticket               Ticket    @relation(fields: [ticketId], references: [id])
+  ticketId             Int
+  assignedFrom         Entity?    @relation("AssignedFrom", fields: [assignedFromId], references: [id])
+  assignedFromId       Int?
+  assignedBy           Entity    @relation("AssignedBy", fields: [assignedById], references: [id])
+  assignedById         Int
+  assignedTo           Entity?    @relation("AssignedToEntity", fields: [assignedToId], references: [id])
+  assignedToId         Int?
+  assignedAt           DateTime
+  createdAt            DateTime  @default(now())
+
+  /// back‐relation for notifications
+  notificationEvent    NotificationEvent? @relation(name: "EventOnAssignmentChange")
+}
+
+model TicketChangePriority {
+  id                   Int            @id @default(autoincrement())
+  ticket               Ticket         @relation(fields: [ticketId], references: [id])
+  ticketId             Int
+  priorityFrom         TicketPriority @relation("PriorityFrom", fields: [priorityFromId], references: [id])
+  priorityFromId       Int
+  priorityTo           TicketPriority @relation("PriorityTo", fields: [priorityToId], references: [id])
+  priorityToId         Int
+  changedBy            Entity         @relation("ChangedByPriority", fields: [changedById], references: [id])
+  changedById          Int
+  changedAt            DateTime
+  createdAt            DateTime       @default(now())
+
+  /// back‐relation for notifications
+  notificationEvent    NotificationEvent? @relation(name: "EventOnPriorityChange")
+}
+
+model TicketChangeStatus {
+  id                   Int           @id @default(autoincrement())
+  ticket               Ticket        @relation(fields: [ticketId], references: [id])
+  ticketId             Int
+  statusFrom           TicketStatus  @relation("StatusFrom", fields: [statusFromId], references: [id])
+  statusFromId         Int
+  statusTo             TicketStatus  @relation("StatusTo", fields: [statusToId], references: [id])
+  statusToId           Int
+  changedBy            Entity        @relation("ChangedByStatus", fields: [changedById], references: [id])
+  changedById          Int
+  changedAt            DateTime
+  createdAt            DateTime     @default(now())
+
+  /// back‐relation for notifications
+  notificationEvent    NotificationEvent? @relation(name: "EventOnStatusChange")
+}
+
+/// ──────────────────────────────────────────────────────────────────────────
+/// Threads & Attachments
+/// ──────────────────────────────────────────────────────────────────────────
+
+model TicketThread {
+  id           Int                      @id @default(autoincrement())
+  ticket       Ticket                   @relation(fields: [ticketId], references: [id])
+  ticketId     Int
+  body         String
+  createdBy    Entity                   @relation(fields: [createdById], references: [id])
+  createdById  Int
+  createdAt    DateTime                 @default(now())
+  attachments  TicketThreadAttachment[] @relation("ThreadAttachments")
+
+  /// back‐relation for notifications
+  notificationEvent NotificationEvent?   @relation(name: "EventOnThread")
+}
+
+model TicketThreadAttachment {
+  id             Int           @id @default(autoincrement())
+  filePath       String
+  fileName       String
+  fileType       String?
+  fileSize       Int?
+  ticketThread   TicketThread  @relation("ThreadAttachments", fields: [ticketThreadId], references: [id])
+  ticketThreadId Int
+  createdAt      DateTime      @default(now())
+}
+
+/// ──────────────────────────────────────────────────────────────────────────
+/// Priorities, Statuses & Categories
+/// ──────────────────────────────────────────────────────────────────────────
+
+model TicketPriority {
+  id             Int                     @id @default(autoincrement())
+  name           String
+  priority       Int
+  color          String
+  ticketsCurrent Ticket[]                
+  changesFrom    TicketChangePriority[]  @relation("PriorityFrom")
+  changesTo      TicketChangePriority[]  @relation("PriorityTo")
+  createdAt      DateTime               @default(now())
+}
+
+model TicketStatus {
+  id             Int                    @id @default(autoincrement())
+  name           String
+  priority       Int
+  color          String
+  ticketsCurrent Ticket[]               
+  changesFrom    TicketChangeStatus[]   @relation("StatusFrom")
+  changesTo      TicketChangeStatus[]   @relation("StatusTo")
+  createdAt      DateTime              @default(now())
+}
+
+model TicketCategory {
+  id                    Int                           @id @default(autoincrement())
+  name                  String
+  parent                TicketCategory?               @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  parentId              Int?
+  children              TicketCategory[]              @relation("CategoryHierarchy")
+  childDropdownLabel    String?
+  priority              Int
+  defaultAssignEntity   Entity?                       @relation("DefaultAssignEntity", fields: [defaultAssignEntityId], references: [id])
+  defaultAssignEntityId Int?
+  availabilityTeams     TicketCategoryAvailabilityTeam[]
+  fieldDefinitions      TicketFieldDefinition[]
+  templates             TicketTemplate[]
+  ticketsCurrent        Ticket[]
+  changesFrom           TicketChangeCategory[]        @relation("CategoryFrom")
+  changesTo             TicketChangeCategory[]        @relation("CategoryTo")
+}
+
+model TicketCategoryAvailabilityTeam {
+  ticketCategory   TicketCategory @relation(fields: [ticketCategoryId], references: [id])
+  ticketCategoryId Int
+  team             Team           @relation(fields: [teamId], references: [id])
+  teamId           Int
+
+  @@id([ticketCategoryId, teamId])
+}
+
+/// ──────────────────────────────────────────────────────────────────────────
+/// Field Definitions & Templates
+/// ──────────────────────────────────────────────────────────────────────────
+
+model TicketFieldDefinition {
+  id                    Int                        @id @default(autoincrement())
+  label                 String
+  applicableCategory    TicketCategory             @relation(fields: [applicableCategoryId], references: [id])
+  applicableCategoryId  Int
+  requiredAtCreation    Boolean
+  priority              Int
+  regex                 String
+  values                TicketFieldValue[]
+  templateValues        TicketTemplateFieldValue[]
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+}
+
+model TicketFieldValue {
+  id                        Int                  @id @default(autoincrement())
+  ticket                    Ticket               @relation(fields: [ticketId], references: [id])
+  ticketId                  Int
+  ticketFieldDefinition     TicketFieldDefinition @relation(fields: [ticketFieldDefinitionId], references: [id])
+  ticketFieldDefinitionId   Int
+  value                     String
+  createdAt                 DateTime             @default(now())
+}
+
+model TicketTemplate {
+  id                    Int                        @id @default(autoincrement())
+  applicableCategory    TicketCategory             @relation(fields: [applicableCategoryId], references: [id])
+  applicableCategoryId  Int
+  body                  String
+  fieldValues           TicketTemplateFieldValue[]
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+}
+
+model TicketTemplateFieldValue {
+  id                        Int                        @id @default(autoincrement())
+  ticketTemplate            TicketTemplate             @relation(fields: [ticketTemplateId], references: [id])
+  ticketTemplateId          Int
+  ticketFieldDefinition     TicketFieldDefinition      @relation(fields: [ticketFieldDefinitionId], references: [id])
+  ticketFieldDefinitionId   Int
+  value                     String
+  createdAt                 DateTime                   @default(now())
+}
+
+/// ──────────────────────────────────────────────────────────────────────────
+/// One-Time Passwords
+/// ──────────────────────────────────────────────────────────────────────────
+
+model EmailOTP {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  otp       String
+  expiresAt DateTime
+  UsedAt    DateTime?
+  createdAt DateTime @default(now())
+}
+
+/// ──────────────────────────────────────────────────────────────────────────
+/// Notifications
+/// ──────────────────────────────────────────────────────────────────────────
+
+enum NotificationType {
+  TICKET_ASSIGNMENT_CHANGED
+  TICKET_PRIORITY_CHANGED
+  TICKET_STATUS_CHANGED
+  TICKET_CATEGORY_CHANGED
+  TICKET_THREAD_NEW
+  USER_ADDED_TO_TEAM
+}
+
+model NotificationEvent {
+  id                  Int               @id @default(autoincrement())
+  type                NotificationType
+  firedAt             DateTime          @default(now())
+  recipients          NotificationRecipient[]
+
+  onAssignmentChange    TicketChangeAssignment? @relation(name: "EventOnAssignmentChange", fields: [onAssignmentChangeId], references: [id])
+  onAssignmentChangeId  Int?                    @unique
+  onPriorityChange      TicketChangePriority?   @relation(name: "EventOnPriorityChange", fields: [onPriorityChangeId], references: [id])
+  onPriorityChangeId    Int?                    @unique
+  onStatusChange        TicketChangeStatus?     @relation(name: "EventOnStatusChange", fields: [onStatusChangeId], references: [id])
+  onStatusChangeId      Int?                    @unique
+  onCategoryChange      TicketChangeCategory?   @relation(name: "EventOnCategoryChange", fields: [onCategoryChangeId], references: [id])
+  onCategoryChangeId    Int?                    @unique
+  onThread              TicketThread?           @relation(name: "EventOnThread", fields: [onThreadId], references: [id])
+  onThreadId            Int?                    @unique
+}
+
+model NotificationRecipient {
+  eventId       Int
+  userId        Int
+  emailNotified Boolean   @default(false)
+  smsNotified   Boolean   @default(false)
+  read          Boolean   @default(false)
+  readAt        DateTime?
+
+  event         NotificationEvent @relation(fields: [eventId], references: [id])
+  user          User              @relation(fields: [userId], references: [id])
+
+  @@id([eventId, userId])
+  @@index([userId, read])
+}
+
+model TicketChangeCategory {
+  id                Int            @id @default(autoincrement())
+  ticket            Ticket         @relation(fields: [ticketId], references: [id])
+  ticketId          Int
+  categoryFrom      TicketCategory @relation("CategoryFrom", fields: [categoryFromId], references: [id])
+  categoryFromId    Int
+  categoryTo        TicketCategory @relation("CategoryTo", fields: [categoryToId], references: [id])
+  categoryToId      Int
+  changedBy         Entity         @relation("ChangedByCategory", fields: [changedById], references: [id])
+  changedById       Int
+  changedAt         DateTime
+  createdAt         DateTime       @default(now())
+
+  /// back‐relation for notifications
+  notificationEvent NotificationEvent? @relation(name: "EventOnCategoryChange")
+}
