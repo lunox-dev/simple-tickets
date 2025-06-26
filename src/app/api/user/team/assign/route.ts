@@ -11,13 +11,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // 2. Check userteam:assign:own permission (only userTeam-level perms)
+  // 2. Check userteam:assign:own permission (user-level or userTeam-level perms)
+  const userPerms = (session.user as any).permissions as string[] || [];
   const userTeams = (session.user as any).teams as Array<{
     userTeamPermissions: string[]
-  }>
-  const canAssign = userTeams
-    .flatMap(t => t.userTeamPermissions)
-    .includes('userteam:assign:own')
+  }>;
+  const canAssign = userPerms.includes('userteam:assign:own') ||
+    userTeams.flatMap(t => t.userTeamPermissions).includes('userteam:assign:own');
 
   if (!canAssign) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

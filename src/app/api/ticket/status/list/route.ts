@@ -11,12 +11,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // 2. Gather all permissions from team and userTeam
+  // 2. Gather all permissions from user, team and userTeam
+  const userPerms = (session.user as any).permissions as string[] || [];
   const userTeams = (session.user as any).teams as Array<{
     permissions: string[]
     userTeamPermissions: string[]
   }>
-  const allPerms = userTeams.flatMap(t => [...t.permissions, ...t.userTeamPermissions])
+  const allPerms = [
+    ...userPerms,
+    ...userTeams.flatMap(t => [...t.permissions, ...t.userTeamPermissions])
+  ];
 
   // 3. Enforce ticketstatus:view:any
   if (!allPerms.includes('ticketstatus:view:any')) {

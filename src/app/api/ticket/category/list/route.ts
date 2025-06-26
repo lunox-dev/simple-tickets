@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
   }
 
   // 2. Permissions
+  const userPerms = (session.user as any).permissions as string[] || [];
   const userTeams = (session.user as any).teams as Array<{
     userTeamId: number
     teamId: number
@@ -20,7 +21,10 @@ export async function GET(req: NextRequest) {
     userTeamPermissions: string[]
     entities?: number[]
   }>
-  const allPerms = userTeams.flatMap(t => [...t.permissions, ...t.userTeamPermissions])
+  const allPerms = [
+    ...userPerms,
+    ...userTeams.flatMap(t => [...t.permissions, ...t.userTeamPermissions])
+  ];
   const canViewAny = allPerms.includes('ticketcategory:view:any')
   const canViewOwn = allPerms.includes('ticketcategory:view:own')
   if (!canViewAny && !canViewOwn) {

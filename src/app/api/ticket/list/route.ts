@@ -21,10 +21,7 @@ export async function GET(req: NextRequest) {
   const accessResult        = await getAccessibleTicketsByUser(userId, 1000)
   const accessibleTicketIds = accessResult.tickets.map(t => t.ticketId)
   if (accessibleTicketIds.length === 0) {
-    return NextResponse.json({
-      page:        1, pageSize:    0, totalItems:  0, totalPages:  0,
-      itemsOnPage: 0, startIndex:  0, endIndex:    0, data: []
-    })
+    return NextResponse.json({ error: 'Forbidden: You do not have permission to view any tickets.' }, { status: 403 })
   }
 
   // 2) Find any unread notifications for this user across those tickets

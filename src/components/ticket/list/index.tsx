@@ -32,6 +32,7 @@ import {
   Plus,
 } from "lucide-react"
 import { format } from "date-fns"
+import NoPermission from '@/components/ui/NoPermission'
 
 interface TicketListItem {
   id: number
@@ -309,6 +310,10 @@ export default function TicketList() {
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     )
+  }
+
+  if (error === 'forbidden') {
+    return <NoPermission message="You do not have permission to view any tickets." />;
   }
 
   if (error) {
