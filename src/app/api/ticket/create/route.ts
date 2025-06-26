@@ -1,7 +1,7 @@
 // src/app/api/ticket/create/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession }        from 'next-auth/next'
-import { authOptions }             from '@/app/api/auth/[...nextauth]/route'
+import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma }                  from '@/lib/prisma'
 import { enqueueNotificationInit } from '@/lib/notification-queue'
 
