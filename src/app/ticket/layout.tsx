@@ -1,6 +1,6 @@
 import type React from "react"
 import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/app/api/auth/[...nextauth]/route"
+import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { redirect } from "next/navigation"
 import AuthenticatedHeader from "@/components/ticket/common/authenticated-header"
 
