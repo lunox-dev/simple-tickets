@@ -130,6 +130,33 @@ export async function getTicketAccessForUser(
     }
   }
 
+  // Grant synthetic accessVia for users with any ticket:action:*:any permission
+  if (via.length === 0) {
+    const actionPerms = Array.from(actionPermSet);
+    const hasAnyActionAny = actionPerms.some(p => {
+      const parts = p.split(":");
+      // ticket:action:<action>:...:any or ticket:action:<action>:...:...:any
+      return parts[0] === 'ticket' && parts[1] === 'action' && parts.includes('any');
+    });
+    if (hasAnyActionAny) {
+      // Add both assignment and creation synthetic access
+      via.push({
+        userTeamId: 0,
+        teamId: 0,
+        from: 'userTeam',
+        permission: 'ticket:action:any',
+        type: 'assignment'
+      });
+      via.push({
+        userTeamId: 0,
+        teamId: 0,
+        from: 'userTeam',
+        permission: 'ticket:action:any',
+        type: 'creation'
+      });
+    }
+  }
+
   if (via.length === 0) return null
 
   return {

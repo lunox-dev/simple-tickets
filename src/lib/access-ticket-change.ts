@@ -3,7 +3,7 @@ import { TicketAccessForUserResponse } from './access-ticket-user'
 
 export function hasChangePermission(
   access: TicketAccessForUserResponse,
-  ticket: Ticket,
+  ticket: Ticket & { currentAssignedTo?: { id?: number } | null, createdBy?: { id?: number } | null },
   type: 'status' | 'priority' | 'category' | 'assigned',
   fromId: number | 'any',
   toId: number | 'any'
@@ -24,22 +24,33 @@ export function hasChangePermission(
         if (pTo !== 'any' && Number(pTo) !== toId) continue
 
         for (const via of access.accessVia) {
-          if (pContext === 'assigned' && via.type === 'assignment') {
+          // Use entityId for assignment/creation context
+          if (pContext === 'assigned' && via.type === 'assignment' && ticket.currentAssignedTo?.id !== undefined) {
             if (
-              pScope === 'any' ||
-              (pScope === 'team' && via.permission.endsWith(':team:any')) ||
-              (pScope === 'self' && via.permission.endsWith(':self'))
+              (via.userTeamId && via.userTeamId === ticket.currentAssignedTo.id) ||
+              (via.teamId && via.teamId === ticket.currentAssignedTo.id)
             ) {
-              return true
+              if (
+                pScope === 'any' ||
+                (pScope === 'team' && via.permission.endsWith(':team:any')) ||
+                (pScope === 'self' && via.permission.endsWith(':self'))
+              ) {
+                return true
+              }
             }
           }
-          if (pContext === 'createdby' && via.type === 'creation') {
+          if (pContext === 'createdby' && via.type === 'creation' && ticket.createdBy?.id !== undefined) {
             if (
-              pScope === 'any' ||
-              (pScope === 'team' && via.permission.endsWith(':team:any')) ||
-              (pScope === 'self' && via.permission.endsWith(':self'))
+              (via.userTeamId && via.userTeamId === ticket.createdBy.id) ||
+              (via.teamId && via.teamId === ticket.createdBy.id)
             ) {
-              return true
+              if (
+                pScope === 'any' ||
+                (pScope === 'team' && via.permission.endsWith(':team:any')) ||
+                (pScope === 'self' && via.permission.endsWith(':self'))
+              ) {
+                return true
+              }
             }
           }
         }
@@ -49,14 +60,19 @@ export function hasChangePermission(
         // toId is the userTeamId being assigned TO
         const pScope = parts[4]
         for (const via of access.accessVia) {
-          if (via.type === 'assignment') {
+          if (via.type === 'assignment' && ticket.currentAssignedTo?.id !== undefined) {
             if (
-              pScope === 'any' ||
-              (pScope === 'team' && via.permission.endsWith(':team:any')) ||
-              (pScope === 'self' && via.permission.endsWith(':self')) ||
-              (pScope === 'team:unclaimed' && via.permission.endsWith(':team:unclaimed'))
+              (via.userTeamId && via.userTeamId === ticket.currentAssignedTo.id) ||
+              (via.teamId && via.teamId === ticket.currentAssignedTo.id)
             ) {
-              return true
+              if (
+                pScope === 'any' ||
+                (pScope === 'team' && via.permission.endsWith(':team:any')) ||
+                (pScope === 'self' && via.permission.endsWith(':self')) ||
+                (pScope === 'team:unclaimed' && via.permission.endsWith(':team:unclaimed'))
+              ) {
+                return true
+              }
             }
           }
         }
@@ -85,7 +101,8 @@ export function hasChangePermission(
 }
 
 export function hasThreadCreatePermission(
-  access: TicketAccessForUserResponse
+  access: TicketAccessForUserResponse,
+  ticketEntityId?: number
 ): boolean {
   for (const p of access.actionPermissions) {
     const parts = p.split(':')
@@ -96,14 +113,19 @@ export function hasThreadCreatePermission(
     const pScope = parts[4]
 
     for (const via of access.accessVia) {
-      if (via.type === 'assignment') {
+      if (via.type === 'assignment' && ticketEntityId !== undefined) {
         if (
-          pScope === 'any' ||
-          (pScope === 'team' && via.permission.endsWith(':team:any')) ||
-          (pScope === 'self' && via.permission.endsWith(':self')) ||
-          (pScope === 'team:unclaimed' && via.permission.endsWith(':team:unclaimed'))
+          (via.userTeamId && via.userTeamId === ticketEntityId) ||
+          (via.teamId && via.teamId === ticketEntityId)
         ) {
-          return true
+          if (
+            pScope === 'any' ||
+            (pScope === 'team' && via.permission.endsWith(':team:any')) ||
+            (pScope === 'self' && via.permission.endsWith(':self')) ||
+            (pScope === 'team:unclaimed' && via.permission.endsWith(':team:unclaimed'))
+          ) {
+            return true
+          }
         }
       }
     }
