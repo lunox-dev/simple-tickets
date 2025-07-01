@@ -65,7 +65,18 @@ export async function getAccessibleTicketsByUser(
 
   if (userTeamPerms.length === 0) return { userId, tickets: [] }
 
-  // Get relevant ticket matches
+  // Fetch entity IDs for user's UserTeams and Teams
+  const userTeamIds = userTeams.map((ut: any) => ut.id)
+  const teamIds = userTeams.map((ut: any) => ut.teamId)
+  const [userTeamEntities, teamEntities] = await Promise.all([
+    prisma.entity.findMany({ where: { userTeamId: { in: userTeamIds } }, select: { id: true, userTeamId: true } }),
+    prisma.entity.findMany({ where: { teamId: { in: teamIds } }, select: { id: true, teamId: true } })
+  ])
+  const userTeamEntityIds = userTeamEntities.map(e => e.id)
+  const teamEntityIds = teamEntities.map(e => e.id)
+  const allEntityIds = [...userTeamEntityIds, ...teamEntityIds]
+
+  // Get relevant ticket matches (entity-aware)
   const tickets = await prisma.ticket.findMany({
     where: {
       OR: userTeamPerms.flatMap(p => {
@@ -73,25 +84,39 @@ export async function getAccessibleTicketsByUser(
         if (p.type === 'assignment') {
           if (p.permission === 'ticket:read:assigned:any') {
             conds.push({})
+            // Entity-aware: also allow if currentAssignedToId is in allEntityIds
+            if (allEntityIds.length > 0) conds.push({ currentAssignedToId: { in: allEntityIds } })
           } else if (p.permission === 'ticket:read:assigned:team:any') {
             conds.push({ currentAssignedTo: { teamId: p.teamId } })
+            // Entity-aware: also allow if currentAssignedToId is the team entity
+            const teamEntity = teamEntities.find(e => e.teamId === p.teamId)
+            if (teamEntity) conds.push({ currentAssignedToId: teamEntity.id })
           } else if (p.permission === 'ticket:read:assigned:team:unclaimed') {
-            conds.push({
-              currentAssignedTo: {
-                teamId: p.teamId,
-                userTeamId: null
-              }
-            })
+            conds.push({ currentAssignedTo: { teamId: p.teamId, userTeamId: null } })
+            // Entity-aware: also allow if currentAssignedToId is the team entity and unclaimed
+            const teamEntity = teamEntities.find(e => e.teamId === p.teamId)
+            if (teamEntity) conds.push({ currentAssignedToId: teamEntity.id })
           } else if (p.permission === 'ticket:read:assigned:self') {
             conds.push({ currentAssignedTo: { userTeamId: p.userTeamId } })
+            // Entity-aware: also allow if currentAssignedToId is the userTeam entity
+            const utEntity = userTeamEntities.find(e => e.userTeamId === p.userTeamId)
+            if (utEntity) conds.push({ currentAssignedToId: utEntity.id })
           }
         } else if (p.type === 'creation') {
           if (p.permission === 'ticket:read:createdby:any') {
             conds.push({})
+            // Entity-aware: also allow if createdById is in allEntityIds
+            if (allEntityIds.length > 0) conds.push({ createdById: { in: allEntityIds } })
           } else if (p.permission === 'ticket:read:createdby:team:any') {
             conds.push({ createdBy: { teamId: p.teamId } })
+            // Entity-aware: also allow if createdById is the team entity
+            const teamEntity = teamEntities.find(e => e.teamId === p.teamId)
+            if (teamEntity) conds.push({ createdById: teamEntity.id })
           } else if (p.permission === 'ticket:read:createdby:self') {
             conds.push({ createdBy: { userTeamId: p.userTeamId } })
+            // Entity-aware: also allow if createdById is the userTeam entity
+            const utEntity = userTeamEntities.find(e => e.userTeamId === p.userTeamId)
+            if (utEntity) conds.push({ createdById: utEntity.id })
           }
         }
         return conds
