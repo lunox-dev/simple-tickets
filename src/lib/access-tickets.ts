@@ -18,28 +18,15 @@ interface UserAccessibleTicketsResponse {
 
 export async function getAccessibleTicketsByUser(
   userId: number,
+  sessionUser: any,
   limit: number = 100
 ): Promise<UserAccessibleTicketsResponse> {
-  const userTeams = await prisma.userTeam.findMany({
-    where: { userId, Active: true },
-    select: {
-      id: true,
-      teamId: true,
-      permissions: true
-    }
-  })
-
-  const teamIds = Array.from(new Set(userTeams.map(ut => ut.teamId)))
-  const teamPerms = await prisma.team.findMany({
-    where: { id: { in: teamIds }, Active: true },
-    select: {
-      id: true,
-      permissions: true
-    }
-  })
-
-  const teamPermMap = new Map<number, string[]>()
-  teamPerms.forEach(t => teamPermMap.set(t.id, t.permissions))
+  const userTeams = sessionUser.teams.map((t: any) => ({
+    id: t.userTeamId,
+    teamId: t.teamId,
+    permissions: t.userTeamPermissions,
+    teamPermissions: t.permissions
+  }))
 
   const userTeamPerms: Array<{
     userTeamId: number
@@ -51,8 +38,8 @@ export async function getAccessibleTicketsByUser(
 
   for (const ut of userTeams) {
     const combinedPerms = [
-      ...ut.permissions.map(p => ({ from: 'userTeam' as const, value: p })),
-      ...(teamPermMap.get(ut.teamId) || []).map(p => ({ from: 'team' as const, value: p }))
+      ...ut.permissions.map((p: any) => ({ from: 'userTeam' as const, value: p })),
+      ...ut.teamPermissions.map((p: any) => ({ from: 'team' as const, value: p }))
     ]
 
     for (const perm of combinedPerms) {

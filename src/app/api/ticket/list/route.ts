@@ -17,11 +17,41 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid session user' }, { status: 400 })
   }
 
+  // 3) Parse filters & pagination (moved up)
+  const qp       = req.nextUrl.searchParams
+  const page     = Math.max(1, parseInt(qp.get('page')     || '1',   10))
+  const pageSize = Math.min(500, Math.max(1, parseInt(qp.get('pageSize') || '100', 10)))
+  const fromDate = qp.get('fromDate') ? new Date(qp.get('fromDate')!) : null
+  const toDate   = qp.get('toDate')   ? new Date(qp.get('toDate')!)   : null
+  const sort     = qp.get('sort')?.toLowerCase() === 'asc' ? 'asc' : 'desc'
+
+  const statusIds   = qp.getAll('status').map(Number).filter(Boolean)
+  const priorityIds = qp.getAll('priority').map(Number).filter(Boolean)
+  const assignedIds = qp.getAll('assignedEntity').map(Number).filter(Boolean)
+
+  const fieldFilters: Array<{ ticketFieldDefinitionId: number; value: string }> = []
+  for (const [key,val] of qp.entries()) {
+    if (key.startsWith('field_')) {
+      const defId = parseInt(key.slice(6),10)
+      if (!isNaN(defId)) fieldFilters.push({ ticketFieldDefinitionId: defId, value: val })
+    }
+  }
+
   // 1) Which tickets can this user see?
-  const accessResult        = await getAccessibleTicketsByUser(userId, 1000)
+  const accessResult        = await getAccessibleTicketsByUser(userId, session.user, 1000)
   const accessibleTicketIds = accessResult.tickets.map(t => t.ticketId)
-  if (accessibleTicketIds.length === 0) {
-    return NextResponse.json({ error: 'Forbidden: You do not have permission to view any tickets.' }, { status: 403 })
+  if (accessResult.tickets.length === 0) {
+    // User has permission, but no tickets exist or are accessible
+    return NextResponse.json({
+      page,
+      pageSize,
+      totalItems: 0,
+      totalPages: 0,
+      itemsOnPage: 0,
+      startIndex: 1,
+      endIndex: 0,
+      data: []
+    })
   }
 
   // 2) Find any unread notifications for this user across those tickets
@@ -64,26 +94,6 @@ export async function GET(req: NextRequest) {
       unreadByTicket.add(event.onStatusChange.ticketId)
     } else if (event.onCategoryChange) {
       unreadByTicket.add(event.onCategoryChange.ticketId)
-    }
-  }
-
-  // 3) Parse filters & pagination
-  const qp       = req.nextUrl.searchParams
-  const page     = Math.max(1, parseInt(qp.get('page')     || '1',   10))
-  const pageSize = Math.min(500, Math.max(1, parseInt(qp.get('pageSize') || '100', 10)))
-  const fromDate = qp.get('fromDate') ? new Date(qp.get('fromDate')!) : null
-  const toDate   = qp.get('toDate')   ? new Date(qp.get('toDate')!)   : null
-  const sort     = qp.get('sort')?.toLowerCase() === 'asc' ? 'asc' : 'desc'
-
-  const statusIds   = qp.getAll('status').map(Number).filter(Boolean)
-  const priorityIds = qp.getAll('priority').map(Number).filter(Boolean)
-  const assignedIds = qp.getAll('assignedEntity').map(Number).filter(Boolean)
-
-  const fieldFilters: Array<{ ticketFieldDefinitionId: number; value: string }> = []
-  for (const [key,val] of qp.entries()) {
-    if (key.startsWith('field_')) {
-      const defId = parseInt(key.slice(6),10)
-      if (!isNaN(defId)) fieldFilters.push({ ticketFieldDefinitionId: defId, value: val })
     }
   }
 
