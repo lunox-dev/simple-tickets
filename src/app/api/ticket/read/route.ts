@@ -57,8 +57,9 @@ export async function GET(req: NextRequest) {
     select: {
       id: true,
       title: true,
-      currentStatus:   { select: { id: true, name: true } },
-      currentPriority: { select: { id: true, name: true } },
+      currentStatus:   { select: { id: true, name: true, color: true } },
+      currentPriority: { select: { id: true, name: true, color: true } },
+      currentCategory: { select: { id: true, name: true, parentId: true } },
       currentAssignedTo: {
         select: {
           id: true,
@@ -91,8 +92,25 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
+  // Fetch all categories for parent chain resolution
+  const allCategories = await prisma.ticketCategory.findMany({ select: { id: true, name: true, parentId: true } })
+  const categoryMap = new Map(allCategories.map(c => [c.id, c]))
+
+  // Helper to build parent chain string
+  function buildCategoryChain(catId: number | null | undefined): string | null {
+    if (!catId) return null;
+    const chain: string[] = [];
+    let current = categoryMap.get(catId);
+    while (current) {
+      chain.unshift(current.name);
+      if (!current.parentId) break;
+      current = categoryMap.get(current.parentId);
+    }
+    return chain.join(' > ');
+  }
+
   // 3) load all threads and change events (assignment/status/priority)
-  const [threads, assigns, prios, stats] = await Promise.all([
+  const [threads, assigns, prios, stats, cats] = await Promise.all([
     prisma.ticketThread.findMany({
       where: { ticketId },
       select: {
@@ -205,6 +223,28 @@ export async function GET(req: NextRequest) {
         notificationEvent: { select: { id: true } }
       }
     }),
+    prisma.ticketChangeCategory.findMany({
+      where: { ticketId },
+      select: {
+        id: true,
+        changedAt: true,
+        categoryFrom: { select: { id: true, name: true } },
+        categoryTo:   { select: { id: true, name: true } },
+        changedBy: {
+          select: {
+            id: true,
+            team:     { select: { name: true } },
+            userTeam: {
+              select: {
+                user: { select: { displayName: true } },
+                team: { select: { name: true } }
+              }
+            }
+          }
+        },
+        notificationEvent: { select: { id: true } }
+      }
+    })
   ])
 
   // 4) collect NotificationEvent IDs
@@ -213,6 +253,7 @@ export async function GET(req: NextRequest) {
     ...assigns.flatMap(a => a.notificationEvent?.id ?? []),
     ...prios.flatMap(p => p.notificationEvent?.id ?? []),
     ...stats.flatMap(s => s.notificationEvent?.id ?? []),
+    ...cats.flatMap(c => c.notificationEvent?.id ?? []),
   ]
 
   // 5) load read flags
@@ -274,6 +315,18 @@ export async function GET(req: NextRequest) {
     })
   }
 
+  for (const c of cats) {
+    activityLog.push({
+      type: 'CATEGORY_CHANGE',
+      id:   c.id,
+      at:   c.changedAt,
+      from: c.categoryFrom,
+      to:   c.categoryTo,
+      by:   formatEntity(c.changedBy),
+      read: c.notificationEvent ? (readMap.get(c.notificationEvent.id) ?? false) : false
+    })
+  }
+
   // 7) chronological sort
   activityLog.sort((a, b) => a.at.getTime() - b.at.getTime())
 
@@ -312,8 +365,9 @@ export async function GET(req: NextRequest) {
     ticket: {
       id:                ticket.id,
       title:             ticket.title,
-      currentStatus:     ticket.currentStatus,
-      currentPriority:   ticket.currentPriority,
+      currentStatus:     ticket.currentStatus ? { ...ticket.currentStatus, color: ticket.currentStatus.color } : null,
+      currentPriority:   ticket.currentPriority ? { ...ticket.currentPriority, color: ticket.currentPriority.color } : null,
+      currentCategory:   ticket.currentCategory ? { ...ticket.currentCategory, name: buildCategoryChain(ticket.currentCategory.id) } : null,
       currentAssignedTo: ticket.currentAssignedTo ? formatEntity(ticket.currentAssignedTo) : null,
       createdBy:         formatEntity(ticket.createdBy),
       createdAt:         ticket.createdAt,

@@ -1,12 +1,11 @@
 import { notFound } from "next/navigation"
 import TicketView from "@/components/ticket/view"
 
-export default async function Page({
+export default async function TicketPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
-  // await the params promise
   const { id } = await params
 
   const ticketId = Number.parseInt(id, 10)

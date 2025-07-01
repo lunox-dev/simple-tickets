@@ -35,8 +35,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
   }
 
-  const fromUserTeamId = ticket.currentAssignedTo?.userTeamId ?? 0
-  const canChange = hasChangePermission(access, ticket, 'assigned', fromUserTeamId, userTeamId ?? 0)
+  // Convert nulls to undefined for type compatibility
+  const safeTicket = {
+    ...ticket,
+    currentAssignedTo: ticket.currentAssignedTo
+      ? {
+          ...ticket.currentAssignedTo,
+          userTeamId: ticket.currentAssignedTo.userTeamId ?? undefined,
+          teamId: ticket.currentAssignedTo.teamId ?? undefined,
+        }
+      : null,
+    createdBy: ticket.createdBy
+      ? {
+          ...ticket.createdBy,
+          userTeamId: ticket.createdBy.userTeamId ?? undefined,
+          teamId: ticket.createdBy.teamId ?? undefined,
+        }
+      : null,
+  }
+
+  const fromUserTeamId = safeTicket.currentAssignedTo?.userTeamId ?? 0
+  const canChange = hasChangePermission(access, safeTicket, 'assigned', fromUserTeamId, userTeamId ?? 0)
   if (!canChange) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

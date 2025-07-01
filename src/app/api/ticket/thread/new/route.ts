@@ -27,7 +27,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const canCreateThread = hasThreadCreatePermission(access)
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    select: { currentAssignedTo: { select: { id: true } } }
+  })
+  if (!ticket) {
+    return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+  }
+
+  const canCreateThread = hasThreadCreatePermission(access, ticket.currentAssignedTo?.id)
   if (!canCreateThread) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

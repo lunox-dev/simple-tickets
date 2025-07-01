@@ -40,7 +40,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Category not found' }, { status: 404 })
   }
 
-  const canChange = hasChangePermission(access, ticket, 'category', ticket.currentCategoryId, categoryId)
+  // Convert nulls to undefined for type compatibility
+  const ticketForPermission = {
+    ...ticket,
+    currentAssignedTo: ticket.currentAssignedTo
+      ? {
+          id: ticket.currentAssignedTo.id,
+          teamId: ticket.currentAssignedTo.teamId ?? undefined,
+          userTeamId: ticket.currentAssignedTo.userTeamId ?? undefined,
+        }
+      : undefined,
+    createdBy: ticket.createdBy
+      ? {
+          id: ticket.createdBy.id,
+          teamId: ticket.createdBy.teamId ?? undefined,
+          userTeamId: ticket.createdBy.userTeamId ?? undefined,
+        }
+      : undefined,
+  }
+
+  const canChange = hasChangePermission(access, ticketForPermission, 'category', ticket.currentCategoryId, categoryId)
   if (!canChange) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

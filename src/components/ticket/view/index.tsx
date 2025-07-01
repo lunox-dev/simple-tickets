@@ -2,24 +2,32 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, AlertCircle, ArrowLeft, Clock, User, Flag, CheckCircle, MessageSquare } from "lucide-react"
+import { Separator } from "@/components/ui/separator"
+import { Loader2, AlertCircle, ArrowLeft, RefreshCw, Reply, MoreHorizontal, Archive, Star } from "lucide-react"
 import { format } from "date-fns"
-import TicketComments from "./ticket-comments"
-import TicketPropertiesPanel from "./properties-panel"
+import TicketConversation from "./conversation"
+import TicketSidebar from "./sidebar"
 import NewThreadForm from "./new-thread-form"
 import NoPermission from "@/components/ui/NoPermission"
 import { useSession } from "next-auth/react"
-import { SimpleRichTextEditor } from "@/components/ui/SimpleRichTextEditor"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 interface TicketData {
   id: number
   title: string
-  currentStatus: { id: number; name: string }
-  currentPriority: { id: number; name: string }
+  currentStatus: { id: number; name: string; color: string }
+  currentPriority: { id: number; name: string; color: string }
+  currentCategory: { id: number; name: string; fullPath?: string }
   currentAssignedTo: { entityId: number; name: string } | null
   createdBy: { entityId: number; name: string }
   createdAt: string
@@ -27,7 +35,7 @@ interface TicketData {
 }
 
 interface ActivityLogEntry {
-  type: "THREAD" | "ASSIGN_CHANGE" | "PRIORITY_CHANGE" | "STATUS_CHANGE"
+  type: "THREAD" | "ASSIGN_CHANGE" | "PRIORITY_CHANGE" | "STATUS_CHANGE" | "CATEGORY_CHANGE"
   id: number
   at: string
   read: boolean
@@ -53,6 +61,8 @@ export default function TicketView({ ticketId }: TicketViewProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [showReplyForm, setShowReplyForm] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const router = useRouter()
 
   const { data: session, status } = useSession()
@@ -112,28 +122,41 @@ export default function TicketView({ ticketId }: TicketViewProps) {
   }
 
   const handleNewThread = () => {
+    setShowReplyForm(false)
     fetchTicketData(true)
-  }
-
-  const hasPermission = (permission: string): boolean => {
-    return data?.user.permissions.includes(permission) ?? false
   }
 
   const canCreateThread = (): boolean => {
     if (!data) return false
 
-    // Check for thread creation permissions
     const threadPermissions = data.user.permissions.filter((p) => p.startsWith("ticket:action:thread:create:"))
 
-    return threadPermissions.some((p) => p.endsWith(":any") || p.endsWith(":team") || p.endsWith(":self"))
+    return threadPermissions.some((p) => {
+      const parts = p.split(":")
+      if (parts.length < 5) return false
+
+      const scope = parts[4] // self, team, team:unclaimed, any
+
+      if (scope === "any") return true
+      if (scope === "team") return true
+      if (scope === "team:unclaimed") {
+        return data.ticket.currentAssignedTo && data.ticket.currentAssignedTo.entityId
+      }
+      if (scope === "self") {
+        return data.ticket.currentAssignedTo && data.ticket.currentAssignedTo.entityId === data.user.id
+      }
+
+      return false
+    })
   }
 
   // Show loading while checking authentication
   if (status === "loading" || isLoading) {
     return (
-      <div className="container mx-auto p-4 md:p-8 max-w-7xl">
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <p className="text-sm text-muted-foreground">Loading ticket...</p>
         </div>
       </div>
     )
@@ -147,13 +170,15 @@ export default function TicketView({ ticketId }: TicketViewProps) {
   if (error) {
     if (error === "NO_PERMISSION") {
       return (
-        <div className="container mx-auto p-4 md:p-8 max-w-7xl">
-          <NoPermission message="You don't have permission to view this ticket." />
-          <div className="mt-4 flex justify-center">
-            <Button variant="outline" onClick={() => router.back()}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Go Back
-            </Button>
+        <div className="min-h-screen bg-gray-50">
+          <div className="container mx-auto px-4 py-8">
+            <NoPermission message="You don't have permission to view this ticket." />
+            <div className="mt-4 flex justify-center">
+              <Button variant="outline" onClick={() => router.back()}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Go Back
+              </Button>
+            </div>
           </div>
         </div>
       )
@@ -161,29 +186,33 @@ export default function TicketView({ ticketId }: TicketViewProps) {
 
     if (error === "TICKET_NOT_FOUND") {
       return (
-        <div className="container mx-auto p-4 md:p-8 max-w-7xl">
-          <NoPermission message="The ticket you're looking for doesn't exist or has been deleted." />
-          <div className="mt-4 flex justify-center">
-            <Button variant="outline" onClick={() => router.push("/tickets")}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Tickets
-            </Button>
+        <div className="min-h-screen bg-gray-50">
+          <div className="container mx-auto px-4 py-8">
+            <NoPermission message="The ticket you're looking for doesn't exist or has been deleted." />
+            <div className="mt-4 flex justify-center">
+              <Button variant="outline" onClick={() => router.push("/tickets")}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Tickets
+              </Button>
+            </div>
           </div>
         </div>
       )
     }
 
     return (
-      <div className="container mx-auto p-4 md:p-8 max-w-7xl">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-        <div className="mt-4">
-          <Button variant="outline" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Go Back
-          </Button>
+      <div className="min-h-screen bg-gray-50">
+        <div className="container mx-auto px-4 py-8">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+          <div className="mt-4">
+            <Button variant="outline" onClick={() => router.back()}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Go Back
+            </Button>
+          </div>
         </div>
       </div>
     )
@@ -195,147 +224,177 @@ export default function TicketView({ ticketId }: TicketViewProps) {
 
   const { ticket, activityLog } = data
 
-  // Separate first thread (ticket body) from other activities
-  const firstThread = activityLog.find((entry) => entry.type === "THREAD")
-  const otherActivities = activityLog.filter((entry) => entry !== firstThread)
+  // Helper function to get contrasting text color
+  const getContrastColor = (hexColor: string) => {
+    // Remove # if present
+    const color = hexColor.replace("#", "")
+
+    // Convert to RGB
+    const r = Number.parseInt(color.substr(0, 2), 16)
+    const g = Number.parseInt(color.substr(2, 2), 16)
+    const b = Number.parseInt(color.substr(4, 2), 16)
+
+    // Calculate luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+
+    // Return black for light colors, white for dark colors
+    return luminance > 0.5 ? "#000000" : "#ffffff"
+  }
 
   return (
-    <div className="container mx-auto p-4 md:p-8 max-w-7xl">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center space-x-4">
-          <Button variant="outline" size="sm" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
-            {isRefreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Clock className="h-4 w-4 mr-2" />}
-            Refresh
-          </Button>
+    <div className="min-h-screen bg-gray-50">
+      {/* Email-like Header */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            {/* Left side - Navigation */}
+            <div className="flex items-center space-x-4">
+              <Button variant="ghost" size="sm" onClick={() => router.back()}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back
+              </Button>
+              <Separator orientation="vertical" className="h-6" />
+              <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
+
+            {/* Right side - Actions */}
+            <div className="flex items-center space-x-2">
+              {canCreateThread() && (
+                <Button onClick={() => setShowReplyForm(true)} size="sm">
+                  <Reply className="h-4 w-4 mr-2" />
+                  Reply
+                </Button>
+              )}
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem>
+                    <Star className="h-4 w-4 mr-2" />
+                    Star ticket
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Archive className="h-4 w-4 mr-2" />
+                    Archive
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>Copy ticket link</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-        {/* Main Content */}
-        <div className="xl:col-span-3 space-y-6">
-          {/* Main Ticket Card */}
-          <Card>
-            <CardHeader className="pb-4">
-              {/* Ticket Title */}
-              <div className="space-y-3">
-                <h1 className="text-2xl font-bold">
-                  #{ticket.id} - {ticket.title}
-                </h1>
+      {/* Main Content Area */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Email-like Conversation View */}
+          <div className={`${sidebarOpen ? "lg:col-span-3" : "lg:col-span-4"} space-y-6`}>
+            {/* Ticket Subject Header */}
+            <Card className="bg-white shadow-sm">
+              <CardContent className="p-6">
+                <div className="space-y-4">
+                  {/* Subject line */}
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                      <span>Ticket #{ticket.id}</span>
+                      <span>•</span>
+                      <span>{format(new Date(ticket.createdAt), "MMM d, yyyy 'at' h:mm a")}</span>
+                    </div>
+                    <h1 className="text-2xl font-semibold text-gray-900 leading-tight">{ticket.title}</h1>
+                  </div>
 
-                {/* Status and Priority Badges */}
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center space-x-2">
-                    <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                    <Badge variant="secondary">{ticket.currentStatus.name}</Badge>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Flag className="h-4 w-4 text-muted-foreground" />
-                    <Badge variant="secondary">{ticket.currentPriority.name}</Badge>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <Badge variant="outline">
-                      Assigned to {ticket.currentAssignedTo ? ticket.currentAssignedTo.name : "Unassigned"}
+                  {/* Status indicators */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Badge
+                      className="font-medium border-0"
+                      style={{
+                        backgroundColor: ticket.currentStatus.color,
+                        color: getContrastColor(ticket.currentStatus.color),
+                      }}
+                    >
+                      {ticket.currentStatus.name}
+                    </Badge>
+                    <Badge
+                      className="font-medium border-0"
+                      style={{
+                        backgroundColor: ticket.currentPriority.color,
+                        color: getContrastColor(ticket.currentPriority.color),
+                      }}
+                    >
+                      {ticket.currentPriority.name}
+                    </Badge>
+                    <Badge variant="outline" className="font-medium">
+                      {ticket.currentCategory.name}
                     </Badge>
                   </div>
-                </div>
 
-                {/* Metadata */}
-                <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                  <span>Created by {ticket.createdBy.name}</span>
-                  <span>•</span>
-                  <span>{format(new Date(ticket.createdAt), "MMM d, yyyy 'at' h:mm a")}</span>
-                  {ticket.updatedAt !== ticket.createdAt && (
-                    <>
-                      <span>•</span>
-                      <span>Updated {format(new Date(ticket.updatedAt), "MMM d, yyyy 'at' h:mm a")}</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-
-            <CardContent>
-              {/* Original Ticket Body */}
-              {firstThread && (
-                <div className="space-y-4">
-                  <SimpleRichTextEditor
-                    value={firstThread.body || ""}
-                    onChange={() => {}} // Read-only
-                    editable={false}
-                    className="border-none bg-transparent p-0"
-                  />
-
-                  {/* First Thread Attachments */}
-                  {firstThread.attachments && firstThread.attachments.length > 0 && (
-                    <div className="space-y-2 pt-4 border-t">
-                      <h4 className="text-sm font-medium">Attachments:</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {firstThread.attachments.map((attachment: any, index: number) => (
-                          <div key={index} className="flex items-center space-x-2 p-2 bg-muted rounded-md">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{attachment.fileName}</p>
-                              {attachment.fileSize && (
-                                <p className="text-xs text-muted-foreground">
-                                  {(attachment.fileSize / 1024).toFixed(2)} KB
-                                </p>
-                              )}
-                            </div>
-                            <Button variant="ghost" size="sm" asChild>
-                              <a href={attachment.filePath} target="_blank" rel="noopener noreferrer">
-                                Download
-                              </a>
-                            </Button>
-                          </div>
-                        ))}
+                  {/* Participants */}
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center space-x-4">
+                      <div>
+                        <span className="text-muted-foreground">From: </span>
+                        <span className="font-medium">{ticket.createdBy.name}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">To: </span>
+                        <span className="font-medium">
+                          {ticket.currentAssignedTo ? ticket.currentAssignedTo.name : "Unassigned"}
+                        </span>
                       </div>
                     </div>
-                  )}
+                  </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Comments and Activity */}
-          {otherActivities.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <MessageSquare className="h-5 w-5" />
-                  <span>Activity ({otherActivities.length})</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <TicketComments activities={otherActivities} />
               </CardContent>
             </Card>
-          )}
 
-          {/* New Comment Form */}
-          {canCreateThread() && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Add Comment</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <NewThreadForm ticketId={ticketId} onThreadCreated={handleNewThread} />
-              </CardContent>
-            </Card>
-          )}
-        </div>
+            {/* Conversation Thread */}
+            <TicketConversation activities={activityLog} lastReadEvent={data.lastReadEvent} ticketId={ticketId} />
 
-        {/* Properties Panel */}
-        <div className="xl:col-span-1">
-          <TicketPropertiesPanel
-            ticket={ticket}
-            userPermissions={data.user.permissions}
-            onTicketUpdate={handleTicketUpdate}
-          />
+            {/* Reply Form */}
+            {showReplyForm && canCreateThread() && (
+              <Card className="bg-white shadow-sm">
+                <CardContent className="p-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                        <Reply className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium">Reply to ticket</h3>
+                        <p className="text-sm text-muted-foreground">Add your response to this conversation</p>
+                      </div>
+                    </div>
+                    <NewThreadForm
+                      ticketId={ticketId}
+                      onThreadCreated={handleNewThread}
+                      onCancel={() => setShowReplyForm(false)}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Sidebar */}
+          {sidebarOpen && (
+            <div className="lg:col-span-1">
+              <TicketSidebar
+                ticket={ticket}
+                userPermissions={data.user.permissions}
+                onTicketUpdate={handleTicketUpdate}
+                onClose={() => setSidebarOpen(false)}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>
