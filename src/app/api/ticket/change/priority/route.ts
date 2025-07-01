@@ -24,7 +24,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } })
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    include: {
+      currentAssignedTo: { select: { id: true, userTeamId: true, teamId: true } },
+      createdBy: { select: { id: true, userTeamId: true, teamId: true } }
+    }
+  })
   if (!ticket) {
     return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
   }
@@ -34,7 +40,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Priority not found' }, { status: 404 })
   }
 
-  const canChange = hasChangePermission(access, ticket, 'priority', ticket.currentPriorityId, priorityId)
+  console.log('User Permissions:', access.actionPermissions)
+  console.log('Current Priority:', ticket.currentPriorityId)
+  console.log('Changing To Priority:', priorityId)
+
+  // Convert nulls to undefined for type compatibility
+  const safeTicket = {
+    ...ticket,
+    currentAssignedTo: ticket.currentAssignedTo
+      ? {
+          ...ticket.currentAssignedTo,
+          userTeamId: ticket.currentAssignedTo.userTeamId ?? undefined,
+          teamId: ticket.currentAssignedTo.teamId ?? undefined,
+        }
+      : undefined,
+    createdBy: ticket.createdBy
+      ? {
+          ...ticket.createdBy,
+          userTeamId: ticket.createdBy.userTeamId ?? undefined,
+          teamId: ticket.createdBy.teamId ?? undefined,
+        }
+      : undefined,
+  }
+
+  const canChange = hasChangePermission(access, safeTicket, 'priority', ticket.currentPriorityId, priorityId)
   if (!canChange) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

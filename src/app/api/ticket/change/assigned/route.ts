@@ -26,7 +26,10 @@ export async function POST(req: NextRequest) {
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
-    include: { currentAssignedTo: true },
+    include: {
+      currentAssignedTo: { select: { id: true, userTeamId: true, teamId: true } },
+      createdBy: { select: { id: true, userTeamId: true, teamId: true } }
+    }
   })
   if (!ticket) {
     return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
