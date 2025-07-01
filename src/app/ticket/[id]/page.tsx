@@ -1,15 +1,15 @@
 import { notFound } from "next/navigation"
 import TicketView from "@/components/ticket/view"
 
-interface TicketPageProps {
-  params: {
-    id: string
-  }
-}
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  // await the params promise
+  const { id } = await params
 
-export default function TicketPage({ params }: TicketPageProps) {
-  const ticketId = Number.parseInt(params.id, 10)
-
+  const ticketId = Number.parseInt(id, 10)
   if (isNaN(ticketId)) {
     notFound()
   }
