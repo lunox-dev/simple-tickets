@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "worker:init": "tsx src/workers/notification-init.ts"
+    "worker:all": "tsx src/workers/notification-workers.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",
