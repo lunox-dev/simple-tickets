@@ -69,6 +69,11 @@ new Worker('notifications', async job => {
       }
     }
 
+    // Normalize event type for rule matching (strip TICKET_ prefix)
+    const eventKey = effectiveEventType.startsWith('TICKET_')
+      ? effectiveEventType.replace(/^TICKET_/, '')
+      : effectiveEventType
+
     // Parse notification preferences if needed
     let emailPrefs: NotificationPreferences | null = null
     let smsPrefs: NotificationPreferences | null = null
@@ -84,11 +89,11 @@ new Worker('notifications', async job => {
 
     // EMAIL
     if (!r.emailNotified && emailPrefs) {
-      console.log(`[NotificationWorker] Checking email rules for user ${user.email} (userId=${user.id}) and eventType=${effectiveEventType}`)
-      const matchedRules = getMatchingRules(emailPrefs, effectiveEventType, contextBase)
+      console.log(`[NotificationWorker] Checking email rules for user ${user.email} (userId=${user.id}) and eventType=${eventKey}`)
+      const matchedRules = getMatchingRules(emailPrefs, eventKey, contextBase)
       if (matchedRules.length > 0 && user.email) {
         const rule = matchedRules[0]
-        console.log(`[NotificationWorker] Sending EMAIL to ${user.email} for eventType=${effectiveEventType} (ruleId=${rule.id})`)
+        console.log(`[NotificationWorker] Sending EMAIL to ${user.email} for eventType=${eventKey} (ruleId=${rule.id})`)
         const context = {
           ...contextBase,
           rule: {
@@ -110,17 +115,17 @@ new Worker('notifications', async job => {
           data: { emailNotified: true }
         })
       } else {
-        console.log(`[NotificationWorker] No matching EMAIL rules for user ${user.email} (userId=${user.id}) and eventType=${effectiveEventType}`)
+        console.log(`[NotificationWorker] No matching EMAIL rules for user ${user.email} (userId=${user.id}) and eventType=${eventKey}`)
       }
     }
 
     // SMS
     if (!r.smsNotified && smsPrefs) {
-      console.log(`[NotificationWorker] Checking SMS rules for user ${user.mobile} (userId=${user.id}) and eventType=${effectiveEventType}`)
-      const matchedRules = getMatchingRules(smsPrefs, effectiveEventType, contextBase)
+      console.log(`[NotificationWorker] Checking SMS rules for user ${user.mobile} (userId=${user.id}) and eventType=${eventKey}`)
+      const matchedRules = getMatchingRules(smsPrefs, eventKey, contextBase)
       if (matchedRules.length > 0 && user.mobile) {
         const rule = matchedRules[0]
-        console.log(`[NotificationWorker] Sending SMS to ${user.mobile} for eventType=${effectiveEventType} (ruleId=${rule.id})`)
+        console.log(`[NotificationWorker] Sending SMS to ${user.mobile} for eventType=${eventKey} (ruleId=${rule.id})`)
         const context = {
           ...contextBase,
           rule: {
@@ -141,7 +146,7 @@ new Worker('notifications', async job => {
           data: { smsNotified: true }
         })
       } else {
-        console.log(`[NotificationWorker] No matching SMS rules for user ${user.mobile} (userId=${user.id}) and eventType=${effectiveEventType}`)
+        console.log(`[NotificationWorker] No matching SMS rules for user ${user.mobile} (userId=${user.id}) and eventType=${eventKey}`)
       }
     }
   }
