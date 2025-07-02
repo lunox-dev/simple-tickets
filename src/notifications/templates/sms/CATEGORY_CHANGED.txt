@@ -1,0 +1,1 @@
+Ticket #{{ticket.id}} - {{ticket.subject}}\nEvent: Category Changed\nNew Category: {{event.onCategoryChange.newCategory}}\nContent: {{notification.content}}\nRule: {{rule.description}} 

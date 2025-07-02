@@ -1,0 +1,1 @@
+Ticket #{{ticket.id}} - {{ticket.subject}}\nEvent: Assignment Changed\nNew Assignee: {{event.onAssignmentChange.newAssignee}}\nContent: {{notification.content}}\nRule: {{rule.description}}

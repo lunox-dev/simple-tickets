@@ -1,9 +1,9 @@
 <html>
   <body>
     <h2>Ticket #{{ticket.id}} - {{ticket.subject}}</h2>
-    <p><strong>Event:</strong> Assignment Changed</p>
+    <p><strong>Event:</strong> Status Changed</p>
     <div>
-      <strong>New Assignee:</strong> {{event.onAssignmentChange.newAssignee}}
+      <strong>New Status:</strong> {{event.onStatusChange.newStatus}}
     </div>
     <div>
       <strong>Content:</strong>
@@ -14,4 +14,4 @@
       <strong>Notification Rule:</strong> {{rule.description}}
     </div>
   </body>
-</html>
+</html> 

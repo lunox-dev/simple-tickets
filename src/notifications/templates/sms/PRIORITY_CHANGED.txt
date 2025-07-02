@@ -1,0 +1,1 @@
+Ticket #{{ticket.id}} - {{ticket.subject}}\nEvent: Priority Changed\nNew Priority: {{event.onPriorityChange.newPriority}}\nContent: {{notification.content}}\nRule: {{rule.description}} 

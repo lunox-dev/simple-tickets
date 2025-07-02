@@ -1,0 +1,1 @@
+Ticket #{{ticket.id}} - {{ticket.subject}}\nEvent: New Thread\nThread Content: {{notification.content}}\nRule: {{rule.description}} 

@@ -16,6 +16,7 @@ type AtomicCondition = {
     eventTypes: string[]
     conditions: Condition
     enabled?: boolean
+    description?: string
   }
   
   type NotificationPreferences = {
@@ -74,4 +75,6 @@ type AtomicCondition = {
         return false
     }
   }
+  
+  export { evaluateCondition };
   

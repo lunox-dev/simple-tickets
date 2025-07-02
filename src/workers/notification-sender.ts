@@ -4,7 +4,7 @@ import IORedis from 'ioredis'
 import { prisma } from '@/lib/prisma'
 import fs from 'fs/promises'
 import path from 'path'
-import { evaluateNotificationRules } from '@/notifications/evaluateRules'
+import { evaluateNotificationRules, evaluateCondition } from '@/notifications/evaluateRules'
 import type { NotificationPreferences } from '@/notifications/evaluateRules'
 import { resolvePlaceholders } from '@/notifications/resolvePlaceholders'
 import { sendEmail, sendSMS } from '@/notifications/send'
@@ -51,7 +51,7 @@ new Worker('notifications', async job => {
 
   for (const r of event.recipients) {
     const user = r.user
-    const context = buildContext(user, event)
+    const contextBase = buildContext(user, event)
 
     // Parse notification preferences if needed
     let emailPrefs: NotificationPreferences | null = null
@@ -65,15 +65,25 @@ new Worker('notifications', async job => {
 
     // EMAIL
     if (!r.emailNotified && emailPrefs) {
-      const shouldEmail = evaluateNotificationRules(
-        emailPrefs,
-        event.type,
-        context
-      )
-
-      if (shouldEmail && user.email) {
+      const matchedRules = getMatchingRules(emailPrefs, event.type, contextBase)
+      if (matchedRules.length > 0 && user.email) {
+        const rule = matchedRules[0]
+        const context = {
+          ...contextBase,
+          rule: {
+            id: rule.id,
+            description: rule.description || '',
+            eventTypes: rule.eventTypes
+          },
+          notification: {
+            body: contextBase.event?.onThread?.content || '',
+            content: contextBase.event?.onThread?.content || '',
+            ruleDescription: rule.description || ''
+          }
+        }
         const html = await loadTemplate('email', event.type, context)
-        await sendEmail(user.email, `Notification: ${event.type}`, html)
+        const subject = `Ticket #${contextBase.event?.onThread?.ticketId || contextBase.event?.onAssignmentChange?.ticketId || contextBase.event?.onPriorityChange?.ticketId || contextBase.event?.onStatusChange?.ticketId || contextBase.event?.onCategoryChange?.ticketId || ''} - ${contextBase.event?.onThread?.ticketSubject || contextBase.event?.onAssignmentChange?.ticketSubject || contextBase.event?.onPriorityChange?.ticketSubject || contextBase.event?.onStatusChange?.ticketSubject || contextBase.event?.onCategoryChange?.ticketSubject || ''}`
+        await sendEmail(user.email, subject, html)
         await prisma.notificationRecipient.update({
           where: { eventId_userId: { eventId, userId: user.id } },
           data: { emailNotified: true }
@@ -83,13 +93,22 @@ new Worker('notifications', async job => {
 
     // SMS
     if (!r.smsNotified && smsPrefs) {
-      const shouldSMS = evaluateNotificationRules(
-        smsPrefs,
-        event.type,
-        context
-      )
-
-      if (shouldSMS && user.mobile) {
+      const matchedRules = getMatchingRules(smsPrefs, event.type, contextBase)
+      if (matchedRules.length > 0 && user.mobile) {
+        const rule = matchedRules[0]
+        const context = {
+          ...contextBase,
+          rule: {
+            id: rule.id,
+            description: rule.description || '',
+            eventTypes: rule.eventTypes
+          },
+          notification: {
+            body: contextBase.event?.onThread?.content || '',
+            content: contextBase.event?.onThread?.content || '',
+            ruleDescription: rule.description || ''
+          }
+        }
         const text = await loadTemplate('sms', event.type, context)
         await sendSMS(user.mobile, text)
         await prisma.notificationRecipient.update({
@@ -111,7 +130,39 @@ async function loadTemplate(type: 'email' | 'sms', eventType: string, context: a
 
 // Simple context builder for notification templates
 function buildContext(user: any, event: any) {
-  // You can expand this as needed for your templates
+  // Extract ticket and thread info from event
+  let ticket = {};
+  let thread = {};
+  if (event.onThread) {
+    ticket = {
+      id: event.onThread.ticketId,
+      subject: event.onThread.ticketSubject,
+    };
+    thread = {
+      id: event.onThread.id,
+      content: event.onThread.content,
+    };
+  } else if (event.onAssignmentChange) {
+    ticket = {
+      id: event.onAssignmentChange.ticketId,
+      subject: event.onAssignmentChange.ticketSubject,
+    };
+  } else if (event.onPriorityChange) {
+    ticket = {
+      id: event.onPriorityChange.ticketId,
+      subject: event.onPriorityChange.ticketSubject,
+    };
+  } else if (event.onStatusChange) {
+    ticket = {
+      id: event.onStatusChange.ticketId,
+      subject: event.onStatusChange.ticketSubject,
+    };
+  } else if (event.onCategoryChange) {
+    ticket = {
+      id: event.onCategoryChange.ticketId,
+      subject: event.onCategoryChange.ticketSubject,
+    };
+  }
   return {
     user: {
       id: user.id,
@@ -128,6 +179,19 @@ function buildContext(user: any, event: any) {
       onStatusChange: event.onStatusChange,
       onCategoryChange: event.onCategoryChange,
       onThread: event.onThread,
-    }
-  }
+    },
+    ticket,
+    thread,
+  };
+}
+
+// Add helper to get all matching rules for deduplication and context
+function getMatchingRules(preferences: NotificationPreferences, eventType: string, context: any) {
+  if (!preferences?.rules) return []
+  return preferences.rules.filter(rule => {
+    if (!rule.enabled) return false
+    if (!rule.eventTypes.includes(eventType)) return false
+    // Evaluate rule conditions
+    return evaluateCondition(rule.conditions, context)
+  })
 }

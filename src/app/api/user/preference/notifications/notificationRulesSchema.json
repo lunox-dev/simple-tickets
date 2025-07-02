@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "rules": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/rule" }
+    }
+  },
+  "required": ["rules"],
+  "definitions": {
+    "rule": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "description": { "type": "string" },
+        "eventTypes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "TICKET_CREATED",
+              "ASSIGNMENT_CHANGED",
+              "PRIORITY_CHANGED",
+              "STATUS_CHANGED",
+              "NEW_THREAD"
+            ]
+          }
+        },
+        "conditions": { "$ref": "#/definitions/condition" },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "required": ["id", "eventTypes", "conditions"]
+    },
+    "condition": {
+      "type": "object",
+      "properties": {
+        "operator": { "type": "string", "enum": ["and", "or"] },
+        "rules": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "$ref": "#/definitions/atomicCondition" },
+              { "$ref": "#/definitions/condition" }
+            ]
+          }
+        }
+      },
+      "required": ["operator", "rules"]
+    },
+    "atomicCondition": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string",
+          "enum": [
+            "priority",
+            "status",
+            "category",
+            "assignedToMe",
+            "assignedToMyTeams",
+            "createdByMe"
+          ]
+        },
+        "operator": {
+          "type": "string",
+          "enum": ["equals", "in", "isTrue", "isFalse", "any"]
+        },
+        "value": {
+          "oneOf": [
+            { "type": "number" },
+            { "type": "array", "items": { "type": "number" } }
+          ]
+        }
+      },
+      "required": ["field", "operator"]
+    }
+  }
+} 

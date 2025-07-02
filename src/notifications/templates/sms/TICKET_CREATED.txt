@@ -1,0 +1,1 @@
+Ticket #{{ticket.id}} - {{ticket.subject}}\nEvent: Ticket Created\nContent: {{notification.content}}\nRule: {{rule.description}} 

@@ -1,0 +1,1 @@
+Ticket #{{ticket.id}} - {{ticket.subject}}\nEvent: Status Changed\nNew Status: {{event.onStatusChange.newStatus}}\nContent: {{notification.content}}\nRule: {{rule.description}} 
