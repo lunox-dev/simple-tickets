@@ -17,6 +17,8 @@ new Worker('notifications', async job => {
   if (job.name !== 'notification-delivery') return
   const { eventId } = job.data
 
+  console.log(`[NotificationWorker] Processing job for eventId=${eventId}`)
+
   const event = await prisma.notificationEvent.findUnique({
     where: { id: eventId },
     include: {
@@ -47,7 +49,10 @@ new Worker('notifications', async job => {
     }
   })
 
-  if (!event) return
+  if (!event) {
+    console.log(`[NotificationWorker] No event found for eventId=${eventId}`)
+    return
+  }
 
   for (const r of event.recipients) {
     const user = r.user
@@ -57,8 +62,10 @@ new Worker('notifications', async job => {
     let effectiveEventType = event.type
     if (event.type === 'TICKET_THREAD_NEW' && event.onThread) {
       const threadCount = await prisma.ticketThread.count({ where: { ticketId: event.onThread.ticketId } })
+      console.log(`[NotificationWorker] Thread count for ticketId=${event.onThread.ticketId}: ${threadCount}`)
       if (threadCount === 1) {
         effectiveEventType = 'TICKET_CREATED'
+        console.log(`[NotificationWorker] Treating event as TICKET_CREATED for ticketId=${event.onThread.ticketId}`)
       }
     }
 
@@ -74,9 +81,11 @@ new Worker('notifications', async job => {
 
     // EMAIL
     if (!r.emailNotified && emailPrefs) {
+      console.log(`[NotificationWorker] Checking email rules for user ${user.email} (userId=${user.id}) and eventType=${effectiveEventType}`)
       const matchedRules = getMatchingRules(emailPrefs, effectiveEventType, contextBase)
       if (matchedRules.length > 0 && user.email) {
         const rule = matchedRules[0]
+        console.log(`[NotificationWorker] Sending EMAIL to ${user.email} for eventType=${effectiveEventType} (ruleId=${rule.id})`)
         const context = {
           ...contextBase,
           rule: {
@@ -97,14 +106,18 @@ new Worker('notifications', async job => {
           where: { eventId_userId: { eventId, userId: user.id } },
           data: { emailNotified: true }
         })
+      } else {
+        console.log(`[NotificationWorker] No matching EMAIL rules for user ${user.email} (userId=${user.id}) and eventType=${effectiveEventType}`)
       }
     }
 
     // SMS
     if (!r.smsNotified && smsPrefs) {
+      console.log(`[NotificationWorker] Checking SMS rules for user ${user.mobile} (userId=${user.id}) and eventType=${effectiveEventType}`)
       const matchedRules = getMatchingRules(smsPrefs, effectiveEventType, contextBase)
       if (matchedRules.length > 0 && user.mobile) {
         const rule = matchedRules[0]
+        console.log(`[NotificationWorker] Sending SMS to ${user.mobile} for eventType=${effectiveEventType} (ruleId=${rule.id})`)
         const context = {
           ...contextBase,
           rule: {
@@ -124,6 +137,8 @@ new Worker('notifications', async job => {
           where: { eventId_userId: { eventId, userId: user.id } },
           data: { smsNotified: true }
         })
+      } else {
+        console.log(`[NotificationWorker] No matching SMS rules for user ${user.mobile} (userId=${user.id}) and eventType=${effectiveEventType}`)
       }
     }
   }
