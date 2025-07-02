@@ -53,6 +53,15 @@ new Worker('notifications', async job => {
     const user = r.user
     const contextBase = buildContext(user, event)
 
+    // --- Patch: If this is a TICKET_THREAD_NEW, check if it's the first thread for the ticket ---
+    let effectiveEventType = event.type
+    if (event.type === 'TICKET_THREAD_NEW' && event.onThread) {
+      const threadCount = await prisma.ticketThread.count({ where: { ticketId: event.onThread.ticketId } })
+      if (threadCount === 1) {
+        effectiveEventType = 'TICKET_CREATED'
+      }
+    }
+
     // Parse notification preferences if needed
     let emailPrefs: NotificationPreferences | null = null
     let smsPrefs: NotificationPreferences | null = null
@@ -65,7 +74,7 @@ new Worker('notifications', async job => {
 
     // EMAIL
     if (!r.emailNotified && emailPrefs) {
-      const matchedRules = getMatchingRules(emailPrefs, event.type, contextBase)
+      const matchedRules = getMatchingRules(emailPrefs, effectiveEventType, contextBase)
       if (matchedRules.length > 0 && user.email) {
         const rule = matchedRules[0]
         const context = {
@@ -81,7 +90,7 @@ new Worker('notifications', async job => {
             ruleDescription: rule.description || ''
           }
         }
-        const html = await loadTemplate('email', event.type, context)
+        const html = await loadTemplate('email', effectiveEventType, context)
         const subject = `Ticket #${contextBase.event?.onThread?.ticketId || contextBase.event?.onAssignmentChange?.ticketId || contextBase.event?.onPriorityChange?.ticketId || contextBase.event?.onStatusChange?.ticketId || contextBase.event?.onCategoryChange?.ticketId || ''} - ${contextBase.event?.onThread?.ticketSubject || contextBase.event?.onAssignmentChange?.ticketSubject || contextBase.event?.onPriorityChange?.ticketSubject || contextBase.event?.onStatusChange?.ticketSubject || contextBase.event?.onCategoryChange?.ticketSubject || ''}`
         await sendEmail(user.email, subject, html)
         await prisma.notificationRecipient.update({
@@ -93,7 +102,7 @@ new Worker('notifications', async job => {
 
     // SMS
     if (!r.smsNotified && smsPrefs) {
-      const matchedRules = getMatchingRules(smsPrefs, event.type, contextBase)
+      const matchedRules = getMatchingRules(smsPrefs, effectiveEventType, contextBase)
       if (matchedRules.length > 0 && user.mobile) {
         const rule = matchedRules[0]
         const context = {
@@ -109,7 +118,7 @@ new Worker('notifications', async job => {
             ruleDescription: rule.description || ''
           }
         }
-        const text = await loadTemplate('sms', event.type, context)
+        const text = await loadTemplate('sms', effectiveEventType, context)
         await sendSMS(user.mobile, text)
         await prisma.notificationRecipient.update({
           where: { eventId_userId: { eventId, userId: user.id } },
