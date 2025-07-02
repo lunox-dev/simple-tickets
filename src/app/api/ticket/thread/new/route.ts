@@ -17,7 +17,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'User is not acting as any team' }, { status: 400 })
   }
 
-  const { ticketId, body } = await req.json()
+  const formData = await req.formData()
+  const ticketId = Number(formData.get("ticketId"))
+  const body = formData.get("body") as string
+
   if (!ticketId || !body) {
     return NextResponse.json({ error: 'Missing ticketId or body' }, { status: 400 })
   }
