@@ -25,6 +25,7 @@ interface User {
   id: number
   displayName: string
   email: string
+  mobile?: string
   permissions: string[]
   teams: Array<{
     userTeamId: number
@@ -35,6 +36,7 @@ interface User {
 interface CreateUserForm {
   email: string
   displayName: string
+  mobile: string
   permissions: string
 }
 
@@ -42,6 +44,7 @@ interface EditUserForm {
   userId: number
   email: string
   displayName: string
+  mobile: string
   permissions: string
   Active: boolean
 }
@@ -57,6 +60,7 @@ export default function UserManagement() {
   const [createForm, setCreateForm] = useState<CreateUserForm>({
     email: "",
     displayName: "",
+    mobile: "",
     permissions: "",
   })
   const [isCreating, setIsCreating] = useState(false)
@@ -67,6 +71,7 @@ export default function UserManagement() {
     userId: 0,
     email: "",
     displayName: "",
+    mobile: "",
     permissions: "",
     Active: true,
   })
@@ -116,6 +121,7 @@ export default function UserManagement() {
         body: JSON.stringify({
           email: createForm.email.trim(),
           displayName: createForm.displayName.trim(),
+          mobile: createForm.mobile.trim() || undefined,
           permissions,
         }),
       })
@@ -127,7 +133,7 @@ export default function UserManagement() {
 
       setSuccess("User created successfully")
       setCreateDialogOpen(false)
-      setCreateForm({ email: "", displayName: "", permissions: "" })
+      setCreateForm({ email: "", displayName: "", mobile: "", permissions: "" })
       fetchUsers()
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred")
@@ -159,6 +165,7 @@ export default function UserManagement() {
           userId: editForm.userId,
           email: editForm.email.trim(),
           displayName: editForm.displayName.trim(),
+          mobile: editForm.mobile.trim() || undefined,
           permissions,
           Active: editForm.Active,
         }),
@@ -184,6 +191,7 @@ export default function UserManagement() {
       userId: user.id,
       email: user.email,
       displayName: user.displayName,
+      mobile: user.mobile || "",
       permissions: user.permissions ? user.permissions.join(", ") : "",
       Active: true, // We don't have Active status in the list response
     })
@@ -249,6 +257,16 @@ export default function UserManagement() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="create-mobile">Mobile Number</Label>
+                <Input
+                  id="create-mobile"
+                  type="tel"
+                  value={createForm.mobile}
+                  onChange={(e) => setCreateForm({ ...createForm, mobile: e.target.value })}
+                  placeholder="e.g. +1234567890"
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="create-permissions">Permissions (comma-separated)</Label>
                 <Textarea
                   id="create-permissions"
@@ -281,6 +299,7 @@ export default function UserManagement() {
                 <TableHead>ID</TableHead>
                 <TableHead>Display Name</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>Mobile</TableHead>
                 <TableHead>Teams</TableHead>
                 <TableHead>Permissions</TableHead>
                 <TableHead>Actions</TableHead>
@@ -299,6 +318,7 @@ export default function UserManagement() {
                     <TableCell className="font-mono">{user.id}</TableCell>
                     <TableCell className="font-medium">{user.displayName}</TableCell>
                     <TableCell>{user.email}</TableCell>
+                    <TableCell>{user.mobile || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {user.teams.length === 0 ? (
@@ -363,6 +383,16 @@ export default function UserManagement() {
                 value={editForm.displayName}
                 onChange={(e) => setEditForm({ ...editForm, displayName: e.target.value })}
                 placeholder="John Doe"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-mobile">Mobile Number</Label>
+              <Input
+                id="edit-mobile"
+                type="tel"
+                value={editForm.mobile}
+                onChange={(e) => setEditForm({ ...editForm, mobile: e.target.value })}
+                placeholder="e.g. +1234567890"
               />
             </div>
             <div className="space-y-2">

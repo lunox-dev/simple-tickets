@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
       id: true,
       displayName: true,
       email: true,
+      mobile: true,
       permissions: true,
       userTeams: {
         select: {
@@ -54,6 +55,7 @@ export async function GET(req: NextRequest) {
     id: u.id,
     displayName: u.displayName,
     email: u.email,
+    mobile: u.mobile,
     permissions: u.permissions || [],
     teams: u.userTeams.map(ut => ({
       userTeamId: ut.id,

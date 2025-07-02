@@ -30,10 +30,11 @@ export async function POST(req: NextRequest) {
   }
 
   // 3. Parse & validate payload
-  const { email, displayName, permissions } = await req.json() as {
+  const { email, displayName, permissions, mobile } = await req.json() as {
     email?: string
     displayName?: string
     permissions?: string[]
+    mobile?: string
   }
   if (typeof email !== 'string' || !email.trim()) {
     return NextResponse.json({ error: 'Email is required' }, { status: 400 })
@@ -44,6 +45,9 @@ export async function POST(req: NextRequest) {
   if (permissions && (!Array.isArray(permissions) || permissions.some(p => typeof p !== 'string'))) {
     return NextResponse.json({ error: 'Permissions must be string[]' }, { status: 400 })
   }
+  if (mobile !== undefined && (typeof mobile !== 'string' || !mobile.trim())) {
+    return NextResponse.json({ error: 'Mobile must be a non-empty string if provided' }, { status: 400 })
+  }
 
   // 4. Create user
   try {
@@ -53,6 +57,7 @@ export async function POST(req: NextRequest) {
         displayName: displayName.trim(),
         permissions: permissions ?? [],
         Active: true,
+        mobile: mobile ? mobile.trim() : undefined,
       }
     })
     return NextResponse.json({ user }, { status: 201 })

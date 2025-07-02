@@ -41,10 +41,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Status not found' }, { status: 404 })
   }
 
-  console.log('User Permissions:', access.actionPermissions)
-  console.log('Current Status:', ticket.currentStatusId)
-  console.log('Changing To Status:', statusId)
-
   // Convert nulls to undefined for type compatibility
   const safeTicket = {
     ...ticket,

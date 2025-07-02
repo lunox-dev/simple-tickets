@@ -40,10 +40,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Priority not found' }, { status: 404 })
   }
 
-  console.log('User Permissions:', access.actionPermissions)
-  console.log('Current Priority:', ticket.currentPriorityId)
-  console.log('Changing To Priority:', priorityId)
-
   // Convert nulls to undefined for type compatibility
   const safeTicket = {
     ...ticket,

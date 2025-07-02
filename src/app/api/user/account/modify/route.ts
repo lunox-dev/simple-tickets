@@ -30,12 +30,13 @@ export async function PATCH(req: NextRequest) {
   }
 
   // 3. Parse & validate payload
-  const { userId, email, displayName, permissions, Active } = await req.json() as {
+  const { userId, email, displayName, permissions, Active, mobile } = await req.json() as {
     userId?: number
     email?: string
     displayName?: string
     permissions?: string[]
     Active?: boolean
+    mobile?: string
   }
   if (typeof userId !== 'number') {
     return NextResponse.json({ error: 'userId (number) is required' }, { status: 400 })
@@ -52,6 +53,9 @@ export async function PATCH(req: NextRequest) {
   if (Active !== undefined && typeof Active !== 'boolean') {
     return NextResponse.json({ error: 'Active must be a boolean' }, { status: 400 })
   }
+  if (mobile !== undefined && (typeof mobile !== 'string' || !mobile.trim())) {
+    return NextResponse.json({ error: 'mobile must be a non-empty string if provided' }, { status: 400 })
+  }
 
   // 4. Update user
   try {
@@ -60,6 +64,7 @@ export async function PATCH(req: NextRequest) {
     if (displayName !== undefined) data.displayName = displayName.trim()
     if (permissions !== undefined) data.permissions = permissions
     if (Active !== undefined) data.Active = Active
+    if (mobile !== undefined) data.mobile = mobile.trim()
 
     const user = await prisma.user.update({
       where: { id: userId },
