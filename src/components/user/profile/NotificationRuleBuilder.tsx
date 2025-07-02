@@ -475,7 +475,7 @@ export default function NotificationRuleBuilder({
 }: { value: NotificationRule[]; onChange: (r: NotificationRule[]) => void; loading: boolean; type: "email" | "sms" }) {
   const [priorities, setPriorities] = useState([])
   const [statuses, setStatuses] = useState([])
-  const [flatCategories, setFlatCategories] = useState([])
+  const [flatCategories, setFlatCategories] = useState<any[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingRule, setEditingRule] = useState<NotificationRule | null>(null)
 

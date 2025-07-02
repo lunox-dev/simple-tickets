@@ -40,16 +40,24 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    // Ensure notification preferences have the correct structure
-    const emailNotificationPreferences = user.emailNotificationPreferences || { rules: [] }
-    const smsNotificationPreferences = user.smsNotificationPreferences || { rules: [] }
-
-    // Ensure rules are arrays
-    if (!Array.isArray(emailNotificationPreferences.rules)) {
-      emailNotificationPreferences.rules = []
+    // Type guard to check if value is a JsonObject with a rules array
+    function hasRulesArray(val: unknown): val is { rules: unknown } {
+      return (
+        typeof val === 'object' &&
+        val !== null &&
+        'rules' in val &&
+        Array.isArray((val as any).rules)
+      )
     }
-    if (!Array.isArray(smsNotificationPreferences.rules)) {
-      smsNotificationPreferences.rules = []
+
+    let emailNotificationPreferences = user.emailNotificationPreferences
+    if (!hasRulesArray(emailNotificationPreferences)) {
+      emailNotificationPreferences = { rules: [] }
+    }
+
+    let smsNotificationPreferences = user.smsNotificationPreferences
+    if (!hasRulesArray(smsNotificationPreferences)) {
+      smsNotificationPreferences = { rules: [] }
     }
 
     return NextResponse.json({
