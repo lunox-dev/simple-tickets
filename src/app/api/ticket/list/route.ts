@@ -27,7 +27,86 @@ export async function GET(req: NextRequest) {
 
   const statusIds   = qp.getAll('status').map(Number).filter(Boolean)
   const priorityIds = qp.getAll('priority').map(Number).filter(Boolean)
+
+  // --- CATEGORY FILTERING ---
+  // Accept multiple category params, expand to include all children
+  const categoryIds = qp.getAll('category').map(Number).filter(Boolean)
+  let expandedCategoryIds: number[] = []
+  if (categoryIds.length) {
+    // Fetch all categories and build parent→children map
+    const allCats = await prisma.ticketCategory.findMany({ select: { id: true, parentId: true } })
+    const childrenMap: Record<number, number[]> = {}
+    allCats.forEach(c => {
+      const pid = c.parentId ?? 0
+      ;(childrenMap[pid] ||= []).push(c.id)
+    })
+    // DFS to expand all selected categories to include all descendants
+    const expanded = new Set<number>()
+    const stack = [...categoryIds]
+    while (stack.length) {
+      const cur = stack.pop()!
+      if (!expanded.has(cur)) {
+        expanded.add(cur)
+        const kids = childrenMap[cur] || []
+        for (const childId of kids) {
+          stack.push(childId)
+        }
+      }
+    }
+    expandedCategoryIds = Array.from(expanded)
+  }
+
+  // --- ASSIGNED ENTITY FILTERING ---
+  // Accept multiple assignedEntity params, expand team to userTeams if requested
   const assignedIds = qp.getAll('assignedEntity').map(Number).filter(Boolean)
+  let expandedAssignedIds: number[] = assignedIds
+  const includeUserTeamsForTeams = qp.get('includeUserTeamsForTeams') === '1'
+  if (assignedIds.length && includeUserTeamsForTeams) {
+    // Fetch all entities for these teams
+    // 1. Find which assignedIds are team entities
+    const teamEntities = await prisma.entity.findMany({
+      where: { id: { in: assignedIds }, teamId: { not: null } },
+      select: { id: true, teamId: true }
+    })
+    if (teamEntities.length) {
+      // 2. For each team, find all userTeam entities
+      const teamIds = teamEntities.map(e => e.teamId!)
+      const userTeamEntities = await prisma.entity.findMany({
+        where: { userTeamId: { not: null }, userTeam: { teamId: { in: teamIds } } },
+        select: { id: true }
+      })
+      expandedAssignedIds = [
+        ...assignedIds,
+        ...userTeamEntities.map(e => e.id)
+      ]
+    }
+  }
+
+  // --- CREATED BY ENTITY FILTERING ---
+  // Accept multiple createdByEntity params, expand team to userTeams if requested
+  const createdByIds = qp.getAll('createdByEntity').map(Number).filter(Boolean)
+  let expandedCreatedByIds: number[] = createdByIds
+  const includeUserTeamsForCreatedByTeams = qp.get('includeUserTeamsForCreatedByTeams') === '1'
+  if (createdByIds.length && includeUserTeamsForCreatedByTeams) {
+    // Fetch all entities for these teams
+    // 1. Find which createdByIds are team entities
+    const teamEntities = await prisma.entity.findMany({
+      where: { id: { in: createdByIds }, teamId: { not: null } },
+      select: { id: true, teamId: true }
+    })
+    if (teamEntities.length) {
+      // 2. For each team, find all userTeam entities
+      const teamIds = teamEntities.map(e => e.teamId!)
+      const userTeamEntities = await prisma.entity.findMany({
+        where: { userTeamId: { not: null }, userTeam: { teamId: { in: teamIds } } },
+        select: { id: true }
+      })
+      expandedCreatedByIds = [
+        ...createdByIds,
+        ...userTeamEntities.map(e => e.id)
+      ]
+    }
+  }
 
   const fieldFilters: Array<{ ticketFieldDefinitionId: number; value: string }> = []
   for (const [key,val] of qp.entries()) {
@@ -107,7 +186,9 @@ export async function GET(req: NextRequest) {
   }
   if (statusIds.length)   where.AND.push({ currentStatusId:   { in: statusIds } })
   if (priorityIds.length) where.AND.push({ currentPriorityId: { in: priorityIds } })
-  if (assignedIds.length) where.AND.push({ currentAssignedToId:{ in: assignedIds } })
+  if (expandedAssignedIds.length) where.AND.push({ currentAssignedToId: { in: expandedAssignedIds } })
+  if (expandedCategoryIds.length) where.AND.push({ currentCategoryId: { in: expandedCategoryIds } })
+  if (expandedCreatedByIds.length) where.AND.push({ createdById: { in: expandedCreatedByIds } })
   for (const f of fieldFilters) {
     where.AND.push({
       fieldValues: {
@@ -124,7 +205,7 @@ export async function GET(req: NextRequest) {
     prisma.ticket.count({ where }),
     prisma.ticket.findMany({
       where,
-      orderBy: { updatedAt: sort },
+      orderBy: { updatedAt: 'desc' }, // Always newest updated at top
       skip:    (page - 1) * pageSize,
       take:    pageSize,
       select: {

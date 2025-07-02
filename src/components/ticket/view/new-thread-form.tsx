@@ -65,7 +65,7 @@ export default function NewThreadForm({ ticketId, onThreadCreated, onCancel }: N
         formData.append(`attachments`, attachment.file)
       })
 
-      const response = await fetch("/api/ticket/thread/create", {
+      const response = await fetch("/api/ticket/thread/new", {
         method: "POST",
         body: formData,
       })
