@@ -79,6 +79,9 @@ new Worker('notifications', async job => {
       smsPrefs = typeof user.smsNotificationPreferences === 'string' ? JSON.parse(user.smsNotificationPreferences) : user.smsNotificationPreferences
     } catch { smsPrefs = null }
 
+    console.log(`[NotificationWorker] User ${user.id} emailPrefs:`, JSON.stringify(emailPrefs))
+    console.log(`[NotificationWorker] User ${user.id} smsPrefs:`, JSON.stringify(smsPrefs))
+
     // EMAIL
     if (!r.emailNotified && emailPrefs) {
       console.log(`[NotificationWorker] Checking email rules for user ${user.email} (userId=${user.id}) and eventType=${effectiveEventType}`)

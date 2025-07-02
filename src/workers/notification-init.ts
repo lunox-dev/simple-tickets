@@ -26,7 +26,7 @@ new Worker(
           onPriorityChange:   { select: { ticketId: true } },
           onStatusChange:     { select: { ticketId: true } },
           onCategoryChange:   { select: { ticketId: true } },
-          onThread:           { select: { ticketId: true } },
+          onThread:           { select: { ticketId: true, id: true } },
         }
       })
       if (!event) throw new Error(`Event ${eventId} not found`)
@@ -39,6 +39,20 @@ new Worker(
       else if (event.onCategoryChange) ticketId = event.onCategoryChange.ticketId
       else if (event.onThread) ticketId = event.onThread.ticketId
       else throw new Error(`Event ${eventId} has no associated change or thread`)
+
+      // --- Patch: If this is a TICKET_THREAD_NEW, check if it's the first thread for the ticket ---
+      if (event.type === 'TICKET_THREAD_NEW' && event.onThread) {
+        const threadCount = await prisma.ticketThread.count({ where: { ticketId: event.onThread.ticketId } })
+        console.log(`[notification-init] Thread count for ticketId=${event.onThread.ticketId}: ${threadCount}`)
+        if (threadCount === 1) {
+          // Update the event type to TICKET_CREATED
+          await prisma.notificationEvent.update({
+            where: { id: eventId },
+            data: { type: 'TICKET_CREATED' }
+          })
+          console.log(`[notification-init] Treating event as TICKET_CREATED for ticketId=${event.onThread.ticketId}`)
+        }
+      }
 
       // 3) Lookup who needs to be notified for this ticket
       const { users } = await getTicketAccessUsers(ticketId)
