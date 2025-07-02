@@ -339,6 +339,7 @@ enum NotificationType {
   TICKET_CATEGORY_CHANGED
   TICKET_THREAD_NEW
   USER_ADDED_TO_TEAM
+  TICKET_CREATED
 }
 
 model NotificationEvent {
