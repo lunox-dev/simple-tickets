@@ -68,7 +68,7 @@ new Worker('notifications', async job => {
   for (const r of event.recipients) {
     const user = r.user
     // Pass ticketPriorityId into context for TICKET_CREATED
-    const contextBase = buildContext(user, event, ticketPriorityId)
+    const contextBase = await buildContext(user, event, ticketPriorityId)
 
     // --- Patch: If this is a TICKET_THREAD_NEW, check if it's the first thread for the ticket ---
     let effectiveEventType = event.type
@@ -190,57 +190,77 @@ async function loadTemplate(type: 'email' | 'sms', eventType: string, context: a
 }
 
 // Simple context builder for notification templates
-function buildContext(user: any, event: any, ticketPriorityId?: number) {
+async function buildContext(user: any, event: any, ticketPriorityId?: number) {
   // Extract ticket and thread info from event
-  let ticket = {};
+  let ticket: any = {};
   let thread = {};
   let priority = undefined;
+  let ticketId = undefined;
+  
+  // Get ticket ID from event
   if (event.onThread) {
-    ticket = {
-      id: event.onThread.ticketId,
-      subject: event.onThread.ticketSubject,
-    };
-    thread = {
-      id: event.onThread.id,
-      content: event.onThread.content,
-    };
-    // Use override if provided (for TICKET_CREATED)
-    if (typeof ticketPriorityId === 'number') {
-      priority = ticketPriorityId;
-    } else if (event.onThread.ticketPriorityId) {
-      priority = event.onThread.ticketPriorityId;
-    }
+    ticketId = event.onThread.ticketId;
   } else if (event.onAssignmentChange) {
-    ticket = {
-      id: event.onAssignmentChange.ticketId,
-      subject: event.onAssignmentChange.ticketSubject,
-    };
-    if (event.onAssignmentChange.ticketPriorityId) {
-      priority = event.onAssignmentChange.ticketPriorityId;
-    }
+    ticketId = event.onAssignmentChange.ticketId;
   } else if (event.onPriorityChange) {
-    ticket = {
-      id: event.onPriorityChange.ticketId,
-      subject: event.onPriorityChange.ticketSubject,
-    };
-    priority = event.onPriorityChange.priorityToId;
+    ticketId = event.onPriorityChange.ticketId;
   } else if (event.onStatusChange) {
-    ticket = {
-      id: event.onStatusChange.ticketId,
-      subject: event.onStatusChange.ticketSubject,
-    };
-    if (event.onStatusChange.ticketPriorityId) {
-      priority = event.onStatusChange.ticketPriorityId;
-    }
+    ticketId = event.onStatusChange.ticketId;
   } else if (event.onCategoryChange) {
-    ticket = {
-      id: event.onCategoryChange.ticketId,
-      subject: event.onCategoryChange.ticketSubject,
-    };
-    if (event.onCategoryChange.ticketPriorityId) {
-      priority = event.onCategoryChange.ticketPriorityId;
+    ticketId = event.onCategoryChange.ticketId;
+  }
+
+  // Fetch complete ticket data if we have a ticket ID
+  if (ticketId) {
+    const ticketData = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        currentAssignedTo: true,
+        currentPriority: true,
+        currentStatus: true,
+        currentCategory: true
+      }
+    });
+    
+    if (ticketData) {
+      ticket = {
+        id: ticketData.id,
+        subject: ticketData.title,
+        assignedTo: ticketData.currentAssignedTo,
+        priority: ticketData.currentPriority,
+        status: ticketData.currentStatus,
+        category: ticketData.currentCategory
+      };
     }
   }
+
+  // Set priority
+  if (typeof ticketPriorityId === 'number') {
+    priority = ticketPriorityId;
+  } else if (event.onPriorityChange) {
+    priority = event.onPriorityChange.priorityToId;
+  } else if (ticket?.priority) {
+    priority = ticket.priority.id;
+  }
+
+  // Set thread info
+  if (event.onThread) {
+    thread = {
+      id: event.onThread.id,
+      content: event.onThread.body,
+    };
+  }
+
+  // Check if ticket is assigned to user's teams
+  const assignedToMyTeams = ticket?.assignedTo && user.userTeams?.some((ut: any) => 
+    ut.team?.id === ticket.assignedTo?.teamId
+  );
+
+  // Check if ticket is assigned to user
+  const assignedToMe = ticket?.assignedTo && user.userTeams?.some((ut: any) => 
+    ut.team?.id === ticket.assignedTo?.teamId && ut.team?.id === user.actionUserTeam?.teamId
+  );
+
   return {
     user: {
       id: user.id,
@@ -261,6 +281,8 @@ function buildContext(user: any, event: any, ticketPriorityId?: number) {
     ticket,
     thread,
     priority,
+    assignedToMyTeams,
+    assignedToMe,
   };
 }
 
