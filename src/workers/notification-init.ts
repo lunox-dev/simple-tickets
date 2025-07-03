@@ -31,6 +31,8 @@ new Worker(
       })
       if (!event) throw new Error(`Event ${eventId} not found`)
 
+      console.log(`[notification-init] Event ${eventId} type: ${event.type}`)
+
       // 2) Figure out the ticketId for this event
       let ticketId: number | undefined
       if (event.onAssignmentChange) ticketId = event.onAssignmentChange.ticketId
@@ -39,6 +41,8 @@ new Worker(
       else if (event.onCategoryChange) ticketId = event.onCategoryChange.ticketId
       else if (event.onThread) ticketId = event.onThread.ticketId
       else throw new Error(`Event ${eventId} has no associated change or thread`)
+
+      console.log(`[notification-init] Event ${eventId} ticketId: ${ticketId}`)
 
       // --- Patch: If this is a TICKET_THREAD_NEW, check if it's the first thread for the ticket ---
       if (event.type === 'TICKET_THREAD_NEW' && event.onThread) {
@@ -56,6 +60,7 @@ new Worker(
 
       // 3) Lookup who needs to be notified for this ticket
       const { users } = await getTicketAccessUsers(ticketId)
+      console.log(`[notification-init] Recipients for event ${eventId}:`, users.map(u => u.userId))
 
       // 4) In a single transaction: create all recipients
       if (users.length) {

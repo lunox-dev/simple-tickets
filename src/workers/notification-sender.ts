@@ -289,10 +289,16 @@ async function buildContext(user: any, event: any, ticketPriorityId?: number) {
 // Add helper to get all matching rules for deduplication and context
 function getMatchingRules(preferences: NotificationPreferences, eventType: string, context: any) {
   if (!preferences?.rules) return []
+  console.log(`[getMatchingRules] Checking rules for eventType=${eventType}`);
+  preferences.rules.forEach(rule => {
+    console.log(`[getMatchingRules] Rule:`, JSON.stringify(rule));
+  });
   return preferences.rules.filter(rule => {
     if (!rule.enabled) return false
     if (!rule.eventTypes.includes(eventType)) return false
     // Evaluate rule conditions
-    return evaluateCondition(rule.conditions, context)
+    const result = evaluateCondition(rule.conditions, context);
+    console.log(`[getMatchingRules] Rule id=${rule.id} evaluated to:`, result);
+    return result;
   })
 }
