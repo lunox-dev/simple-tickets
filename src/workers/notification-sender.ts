@@ -82,7 +82,7 @@ new Worker('notifications', async job => {
     }
 
     // Use the full event type for rule matching (do not strip TICKET_ prefix)
-    const eventKey = effectiveEventType;
+    const eventKey = normalizeEventType(effectiveEventType);
 
     // Parse notification preferences if needed
     let emailPrefs: NotificationPreferences | null = null
@@ -549,4 +549,18 @@ function getMatchingRules(preferences: NotificationPreferences, eventType: strin
     console.log(`[getMatchingRules] Rule id=${rule.id} evaluated to:`, result);
     return result;
   })
+}
+
+// Add event type normalization utility
+const eventTypeMapping: Record<string, string> = {
+  TICKET_CREATED: "TICKET_CREATED",
+  TICKET_PRIORITY_CHANGED: "PRIORITY_CHANGED",
+  TICKET_THREAD_NEW: "NEW_THREAD",
+  TICKET_ASSIGNMENT_CHANGED: "ASSIGNMENT_CHANGED",
+  TICKET_STATUS_CHANGED: "STATUS_CHANGED",
+  TICKET_CATEGORY_CHANGED: "CATEGORY_CHANGED"
+};
+
+function normalizeEventType(eventType: string): string {
+  return eventTypeMapping[eventType] || eventType;
 }
