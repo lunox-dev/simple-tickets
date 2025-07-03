@@ -12,22 +12,41 @@ const transporter = nodemailer.createTransport({
 })
 
 export async function sendEmail(to: string, subject: string, html: string) {
-  console.log(`[sendEmail] Sending email to: ${to}, subject: ${subject}`)
+  console.log(`[sendEmail] Preparing to send email...`);
+  console.log(`[sendEmail] SMTP config:`, {
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT,
+    from: process.env.SMTP_FROM,
+    user: process.env.SMTP_USER,
+    // Do NOT log password!
+  });
+  // crude HTML to text fallback
+  const text = html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  const mailOptions = {
+    from: process.env.SMTP_FROM!,
+    to,
+    subject,
+    html,
+    text
+  };
+  console.log(`[sendEmail] Mail options:`, mailOptions);
+
   try {
-    // crude HTML to text fallback
-    const text = html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-    const result = await transporter.sendMail({
-      from: process.env.SMTP_FROM!,
-      to,
-      subject,
-      html,
-      text
-    })
-    console.log(`[sendEmail] Email sent result:`, result)
-    return result
+    const result = await transporter.sendMail(mailOptions);
+    console.log(`[sendEmail] Email sent result:`, result);
+    if (result.accepted && result.accepted.length > 0) {
+      console.log(`[sendEmail] Email accepted by SMTP server for:`, result.accepted);
+    }
+    if (result.rejected && result.rejected.length > 0) {
+      console.warn(`[sendEmail] Email rejected by SMTP server for:`, result.rejected);
+    }
+    if (result.response) {
+      console.log(`[sendEmail] SMTP response:`, result.response);
+    }
+    return result;
   } catch (err) {
-    console.error(`[sendEmail] Error sending email:`, err)
-    throw err
+    console.error(`[sendEmail] Error sending email:`, err);
+    throw err;
   }
 }
 
