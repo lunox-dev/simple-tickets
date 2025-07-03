@@ -86,6 +86,7 @@ new Worker('notifications', async job => {
 
     console.log(`[NotificationWorker] User ${user.id} emailPrefs:`, JSON.stringify(emailPrefs))
     console.log(`[NotificationWorker] User ${user.id} smsPrefs:`, JSON.stringify(smsPrefs))
+    console.log(`[NotificationWorker] Context for user ${user.id} and eventType=${eventKey}:`, JSON.stringify(contextBase))
 
     // EMAIL
     if (!r.emailNotified && emailPrefs) {
