@@ -121,13 +121,18 @@ new Worker('notifications', async job => {
             ruleDescription: rule.description || ''
           }
         }
+        console.log(`[NotificationWorker] About to load template for eventType=${effectiveEventType}`)
         const html = await loadTemplate('email', effectiveEventType, context)
+        console.log(`[NotificationWorker] Template loaded, HTML length: ${html.length}`)
         const subject = `Ticket #${contextBase.event?.onThread?.ticketId || contextBase.event?.onAssignmentChange?.ticketId || contextBase.event?.onPriorityChange?.ticketId || contextBase.event?.onStatusChange?.ticketId || contextBase.event?.onCategoryChange?.ticketId || ''} - ${contextBase.event?.onThread?.ticketSubject || contextBase.event?.onAssignmentChange?.ticketSubject || contextBase.event?.onPriorityChange?.ticketSubject || contextBase.event?.onStatusChange?.ticketSubject || contextBase.event?.onCategoryChange?.ticketSubject || ''}`
+        console.log(`[NotificationWorker] About to call sendEmail with subject: ${subject}`)
         await sendEmail(user.email, subject, html)
+        console.log(`[NotificationWorker] sendEmail call completed`)
         await prisma.notificationRecipient.update({
           where: { eventId_userId: { eventId, userId: user.id } },
           data: { emailNotified: true }
         })
+        console.log(`[NotificationWorker] Updated notification recipient as notified`)
       } else {
         console.log(`[NotificationWorker] No matching EMAIL rules for user ${user.email} (userId=${user.id}) and eventType=${eventKey}`)
       }
@@ -171,8 +176,12 @@ async function loadTemplate(type: 'email' | 'sms', eventType: string, context: a
   const ext = type === 'email' ? 'html' : 'txt'
   const basePath = path.join(process.cwd(), 'src/notifications/templates', type)
   const filePath = path.join(basePath, `${eventType}.${ext}`)
+  console.log(`[loadTemplate] Loading template from: ${filePath}`)
   const template = await fs.readFile(filePath, 'utf8')
-  return resolvePlaceholders(template, context)
+  console.log(`[loadTemplate] Template loaded, length: ${template.length}`)
+  const resolved = resolvePlaceholders(template, context)
+  console.log(`[loadTemplate] Template resolved, length: ${resolved.length}`)
+  return resolved
 }
 
 // Simple context builder for notification templates
