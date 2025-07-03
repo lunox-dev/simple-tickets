@@ -106,6 +106,44 @@ new Worker('notifications', async job => {
       if (matchedRules.length > 0 && user.email) {
         const rule = matchedRules[0]
         console.log(`[NotificationWorker] Sending EMAIL to ${user.email} for eventType=${eventKey} (ruleId=${rule.id})`)
+
+        // --- Fetch unseen threads/events for notification.content ---
+        let notificationContent = '';
+        let ticketId = contextBase.ticket?.id;
+        if (ticketId) {
+          // Find the last eventId for which this user was notified for this ticket
+          const lastNotified = await prisma.notificationRecipient.findFirst({
+            where: {
+              userId: user.id,
+              emailNotified: true,
+              event: { OR: [
+                { onThread: { ticketId } },
+                { onAssignmentChange: { ticketId } },
+                { onPriorityChange: { ticketId } },
+                { onStatusChange: { ticketId } },
+                { onCategoryChange: { ticketId } },
+              ] }
+            },
+            orderBy: { eventId: 'desc' },
+            include: { event: true }
+          });
+          // Find all threads for this ticket whose notificationEventId > sinceEventId
+          let sinceEventId = lastNotified?.eventId || 0;
+          const newThreads = await prisma.ticketThread.findMany({
+            where: {
+              ticketId,
+              notificationEvent: {
+                id: { gt: sinceEventId }
+              }
+            },
+            orderBy: { createdAt: 'asc' }
+          });
+          notificationContent = newThreads.map(t => t.body).join('\n\n');
+          if (!notificationContent && contextBase.thread && typeof contextBase.thread === 'object' && 'content' in contextBase.thread) {
+            notificationContent = String((contextBase.thread as any).content);
+          }
+        }
+
         const context = {
           ...contextBase,
           rule: {
@@ -114,15 +152,16 @@ new Worker('notifications', async job => {
             eventTypes: rule.eventTypes
           },
           notification: {
-            body: contextBase.event?.onThread?.content || '',
-            content: contextBase.event?.onThread?.content || '',
+            body: notificationContent,
+            content: notificationContent,
             ruleDescription: rule.description || ''
           }
         }
         console.log(`[NotificationWorker] About to load template for eventType=${effectiveEventType}`)
         const html = await loadTemplate('email', effectiveEventType, context)
         console.log(`[NotificationWorker] Template loaded, HTML length: ${html.length}`)
-        const subject = `Ticket #${contextBase.event?.onThread?.ticketId || contextBase.event?.onAssignmentChange?.ticketId || contextBase.event?.onPriorityChange?.ticketId || contextBase.event?.onStatusChange?.ticketId || contextBase.event?.onCategoryChange?.ticketId || ''} - ${contextBase.event?.onThread?.ticketSubject || contextBase.event?.onAssignmentChange?.ticketSubject || contextBase.event?.onPriorityChange?.ticketSubject || contextBase.event?.onStatusChange?.ticketSubject || contextBase.event?.onCategoryChange?.ticketSubject || ''}`
+        // Always use ticket number and subject in the email subject
+        const subject = `Ticket #${contextBase.ticket?.id || ''} - ${contextBase.ticket?.subject || ''}`
         console.log(`[NotificationWorker] About to call sendEmail with subject: ${subject}`)
         await sendEmail(user.email, subject, html)
         console.log(`[NotificationWorker] sendEmail call completed`)
@@ -144,6 +183,44 @@ new Worker('notifications', async job => {
       if (matchedRules.length > 0 && user.mobile) {
         const rule = matchedRules[0]
         console.log(`[NotificationWorker] Sending SMS to ${user.mobile} for eventType=${eventKey} (ruleId=${rule.id})`)
+
+        // --- Fetch unseen threads/events for notification.content for SMS ---
+        let notificationContent = '';
+        let ticketId = contextBase.ticket?.id;
+        if (ticketId) {
+          // Find the last eventId for which this user was SMS-notified for this ticket
+          const lastNotified = await prisma.notificationRecipient.findFirst({
+            where: {
+              userId: user.id,
+              smsNotified: true,
+              event: { OR: [
+                { onThread: { ticketId } },
+                { onAssignmentChange: { ticketId } },
+                { onPriorityChange: { ticketId } },
+                { onStatusChange: { ticketId } },
+                { onCategoryChange: { ticketId } },
+              ] }
+            },
+            orderBy: { eventId: 'desc' },
+            include: { event: true }
+          });
+          // Find all threads for this ticket whose notificationEventId > sinceEventId
+          let sinceEventId = lastNotified?.eventId || 0;
+          const newThreads = await prisma.ticketThread.findMany({
+            where: {
+              ticketId,
+              notificationEvent: {
+                id: { gt: sinceEventId }
+              }
+            },
+            orderBy: { createdAt: 'asc' }
+          });
+          notificationContent = newThreads.map(t => t.body).join('\n\n');
+          if (!notificationContent && contextBase.thread && typeof contextBase.thread === 'object' && 'content' in contextBase.thread) {
+            notificationContent = String((contextBase.thread as any).content);
+          }
+        }
+
         const context = {
           ...contextBase,
           rule: {
@@ -152,8 +229,8 @@ new Worker('notifications', async job => {
             eventTypes: rule.eventTypes
           },
           notification: {
-            body: contextBase.event?.onThread?.content || '',
-            content: contextBase.event?.onThread?.content || '',
+            body: notificationContent,
+            content: notificationContent,
             ruleDescription: rule.description || ''
           }
         }
