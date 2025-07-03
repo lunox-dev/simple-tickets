@@ -1,1 +1,1 @@
-Ticket #{{ticket.id}} - {{ticket.subject}}\nEvent: Ticket Created\nContent: {{notification.content}}\nRule: {{rule.description}} 
+Ticket #{{ticket.id}} - {{ticket.subject}}\nEvent: Ticket Created\nBy: {{ticket.createdByDisplayName}} ({{ticket.createdByEmail}}) at {{ticket.createdAt}}\nPriority: {{ticket.priorityName}}\nCategory: {{ticket.categoryName}}\nStatus: {{ticket.statusName}}\nContent: {{notification.content}}\nRule: {{rule.description}} 

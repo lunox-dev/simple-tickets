@@ -3,7 +3,14 @@
     <h2>Ticket #{{ticket.id}} - {{ticket.subject}}</h2>
     <p><strong>Event:</strong> Category Changed</p>
     <div>
-      <strong>New Category:</strong> {{event.onCategoryChange.newCategory}}
+      <strong>Changed By:</strong> {{change.changedByDisplayName}} ({{change.changedByEmail}}) at {{change.changedAt}}
+    </div>
+    <div>
+      <strong>Category:</strong> {{change.fromName}} &rarr; {{change.toName}}
+    </div>
+    <div>
+      <strong>Priority:</strong> {{ticket.priorityName}}<br/>
+      <strong>Status:</strong> {{ticket.statusName}}
     </div>
     <div>
       <strong>Content:</strong>

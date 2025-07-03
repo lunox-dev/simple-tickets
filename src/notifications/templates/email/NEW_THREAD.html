@@ -3,6 +3,14 @@
     <h2>Ticket #{{ticket.id}} - {{ticket.subject}}</h2>
     <p><strong>Event:</strong> New Thread</p>
     <div>
+      <strong>Thread Author:</strong> {{thread.authorDisplayName}} ({{thread.authorEmail}}) at {{thread.createdAt}}
+    </div>
+    <div>
+      <strong>Priority:</strong> {{ticket.priorityName}}<br/>
+      <strong>Category:</strong> {{ticket.categoryName}}<br/>
+      <strong>Status:</strong> {{ticket.statusName}}
+    </div>
+    <div>
       <strong>Thread Content:</strong>
       <div>{{notification.content}}</div>
     </div>

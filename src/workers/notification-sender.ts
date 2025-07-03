@@ -271,7 +271,9 @@ async function buildContext(user: any, event: any, ticketPriorityId?: number) {
   let thread = {};
   let priority = undefined;
   let ticketId = undefined;
-  
+  let threadDetails = undefined;
+  let changeDetails = undefined;
+
   // Get ticket ID from event
   if (event.onThread) {
     ticketId = event.onThread.ticketId;
@@ -290,13 +292,23 @@ async function buildContext(user: any, event: any, ticketPriorityId?: number) {
     const ticketData = await prisma.ticket.findUnique({
       where: { id: ticketId },
       include: {
-        currentAssignedTo: true,
+        currentAssignedTo: {
+          include: {
+            userTeam: { include: { user: true, team: true } },
+            team: true
+          }
+        },
         currentPriority: true,
         currentStatus: true,
-        currentCategory: true
+        currentCategory: true,
+        createdBy: {
+          include: {
+            userTeam: { include: { user: true, team: true } },
+            team: true
+          }
+        }
       }
     });
-    
     if (ticketData) {
       ticket = {
         id: ticketData.id,
@@ -304,7 +316,9 @@ async function buildContext(user: any, event: any, ticketPriorityId?: number) {
         assignedTo: ticketData.currentAssignedTo,
         priority: ticketData.currentPriority,
         status: ticketData.currentStatus,
-        category: ticketData.currentCategory
+        category: ticketData.currentCategory,
+        createdBy: ticketData.createdBy,
+        createdAt: ticketData.createdAt
       };
     }
   }
@@ -318,12 +332,150 @@ async function buildContext(user: any, event: any, ticketPriorityId?: number) {
     priority = ticket.priority.id;
   }
 
-  // Set thread info
+  // Set thread info (with author details)
   if (event.onThread) {
-    thread = {
-      id: event.onThread.id,
-      content: event.onThread.body,
-    };
+    const threadData = await prisma.ticketThread.findUnique({
+      where: { id: event.onThread.id },
+      include: {
+        createdBy: {
+          include: {
+            userTeam: { include: { user: true, team: true } },
+            team: true
+          }
+        }
+      }
+    });
+    if (threadData) {
+      let authorDisplayName = undefined;
+      let authorEmail = undefined;
+      if (threadData.createdBy.userTeam && threadData.createdBy.userTeam.user) {
+        authorDisplayName = threadData.createdBy.userTeam.user.displayName;
+        authorEmail = threadData.createdBy.userTeam.user.email;
+      } else if (threadData.createdBy.team) {
+        authorDisplayName = threadData.createdBy.team.name;
+        authorEmail = undefined;
+      }
+      threadDetails = {
+        id: threadData.id,
+        body: threadData.body,
+        createdAt: threadData.createdAt,
+        authorDisplayName,
+        authorEmail
+      };
+    }
+  }
+
+  // Set change info (for assignment, priority, status, category changes)
+  if (event.onAssignmentChange) {
+    const change = await prisma.ticketChangeAssignment.findUnique({
+      where: { id: event.onAssignmentChange.id },
+      include: {
+        assignedFrom: {
+          include: {
+            userTeam: { include: { user: true, team: true } },
+            team: true
+          }
+        },
+        assignedTo: {
+          include: {
+            userTeam: { include: { user: true, team: true } },
+            team: true
+          }
+        },
+        assignedBy: {
+          include: {
+            userTeam: { include: { user: true, team: true } },
+            team: true
+          }
+        }
+      }
+    });
+    if (change) {
+      changeDetails = {
+        fromId: change.assignedFromId,
+        fromName: change.assignedFrom?.userTeam?.user?.displayName || change.assignedFrom?.team?.name,
+        toId: change.assignedToId,
+        toName: change.assignedTo?.userTeam?.user?.displayName || change.assignedTo?.team?.name,
+        changedByDisplayName: change.assignedBy?.userTeam?.user?.displayName || change.assignedBy?.team?.name,
+        changedByEmail: change.assignedBy?.userTeam?.user?.email,
+        changedAt: change.assignedAt
+      };
+    }
+  } else if (event.onPriorityChange) {
+    const change = await prisma.ticketChangePriority.findUnique({
+      where: { id: event.onPriorityChange.id },
+      include: {
+        priorityFrom: true,
+        priorityTo: true,
+        changedBy: {
+          include: {
+            userTeam: { include: { user: true, team: true } },
+            team: true
+          }
+        }
+      }
+    });
+    if (change) {
+      changeDetails = {
+        fromId: change.priorityFromId,
+        fromName: change.priorityFrom?.name,
+        toId: change.priorityToId,
+        toName: change.priorityTo?.name,
+        changedByDisplayName: change.changedBy?.userTeam?.user?.displayName || change.changedBy?.team?.name,
+        changedByEmail: change.changedBy?.userTeam?.user?.email,
+        changedAt: change.changedAt
+      };
+    }
+  } else if (event.onStatusChange) {
+    const change = await prisma.ticketChangeStatus.findUnique({
+      where: { id: event.onStatusChange.id },
+      include: {
+        statusFrom: true,
+        statusTo: true,
+        changedBy: {
+          include: {
+            userTeam: { include: { user: true, team: true } },
+            team: true
+          }
+        }
+      }
+    });
+    if (change) {
+      changeDetails = {
+        fromId: change.statusFromId,
+        fromName: change.statusFrom?.name,
+        toId: change.statusToId,
+        toName: change.statusTo?.name,
+        changedByDisplayName: change.changedBy?.userTeam?.user?.displayName || change.changedBy?.team?.name,
+        changedByEmail: change.changedBy?.userTeam?.user?.email,
+        changedAt: change.changedAt
+      };
+    }
+  } else if (event.onCategoryChange) {
+    const change = await prisma.ticketChangeCategory.findUnique({
+      where: { id: event.onCategoryChange.id },
+      include: {
+        categoryFrom: true,
+        categoryTo: true,
+        changedBy: {
+          include: {
+            userTeam: { include: { user: true, team: true } },
+            team: true
+          }
+        }
+      }
+    });
+    if (change) {
+      changeDetails = {
+        fromId: change.categoryFromId,
+        fromName: change.categoryFrom?.name,
+        toId: change.categoryToId,
+        toName: change.categoryTo?.name,
+        changedByDisplayName: change.changedBy?.userTeam?.user?.displayName || change.changedBy?.team?.name,
+        changedByEmail: change.changedBy?.userTeam?.user?.email,
+        changedAt: change.changedAt
+      };
+    }
   }
 
   // Get user's entityId and team entityIds
@@ -361,8 +513,21 @@ async function buildContext(user: any, event: any, ticketPriorityId?: number) {
       onCategoryChange: event.onCategoryChange,
       onThread: event.onThread,
     },
-    ticket,
-    thread,
+    ticket: ticket ? {
+      id: ticket.id,
+      subject: ticket.subject,
+      priorityId: ticket.priority?.id,
+      priorityName: ticket.priority?.name,
+      categoryId: ticket.category?.id,
+      categoryName: ticket.category?.name,
+      statusId: ticket.status?.id,
+      statusName: ticket.status?.name,
+      createdByDisplayName: ticket.createdBy?.userTeam?.user?.displayName || ticket.createdBy?.team?.name,
+      createdByEmail: ticket.createdBy?.userTeam?.user?.email,
+      createdAt: ticket.createdAt
+    } : {},
+    thread: threadDetails,
+    change: changeDetails,
     priority,
     assignedToMyTeams,
     assignedToMe,

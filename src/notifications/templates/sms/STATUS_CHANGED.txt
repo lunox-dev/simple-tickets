@@ -1,1 +1,1 @@
-Ticket #{{ticket.id}} - {{ticket.subject}}\nEvent: Status Changed\nNew Status: {{event.onStatusChange.newStatus}}\nContent: {{notification.content}}\nRule: {{rule.description}} 
+Ticket #{{ticket.id}} - {{ticket.subject}}\nEvent: Status Changed\nBy: {{change.changedByDisplayName}} ({{change.changedByEmail}}) at {{change.changedAt}}\nStatus: {{change.fromName}} -> {{change.toName}}\nPriority: {{ticket.priorityName}}\nCategory: {{ticket.categoryName}}\nContent: {{notification.content}}\nRule: {{rule.description}} 

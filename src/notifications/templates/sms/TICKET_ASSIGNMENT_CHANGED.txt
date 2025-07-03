@@ -1,1 +1,1 @@
-Ticket #{{ticket.id}} - {{ticket.subject}}\nEvent: Assignment Changed\nNew Assignee: {{event.onAssignmentChange.newAssignee}}\nContent: {{notification.content}}\nRule: {{rule.description}}
+Ticket #{{ticket.id}} - {{ticket.subject}}\nEvent: Assignment Changed\nBy: {{change.changedByDisplayName}} ({{change.changedByEmail}}) at {{change.changedAt}}\nAssignee: {{change.fromName}} -> {{change.toName}}\nPriority: {{ticket.priorityName}}\nCategory: {{ticket.categoryName}}\nStatus: {{ticket.statusName}}\nContent: {{notification.content}}\nRule: {{rule.description}}
