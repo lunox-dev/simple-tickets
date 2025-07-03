@@ -11,7 +11,7 @@ const transporter = nodemailer.createTransport({
   }
 })
 
-export async function sendEmail(to: string, subject: string, html: string) {
+export async function sendEmail(to: string, subject: string, html: string, headers?: Record<string, string>) {
   console.log(`[sendEmail] Preparing to send email...`);
   console.log(`[sendEmail] SMTP config:`, {
     host: process.env.SMTP_HOST,
@@ -27,7 +27,8 @@ export async function sendEmail(to: string, subject: string, html: string) {
     to,
     subject,
     html,
-    text
+    text,
+    ...(headers ? { headers } : {})
   };
   console.log(`[sendEmail] Mail options:`, mailOptions);
 

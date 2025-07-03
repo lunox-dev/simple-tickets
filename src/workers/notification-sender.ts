@@ -162,8 +162,20 @@ new Worker('notifications', async job => {
         console.log(`[NotificationWorker] Template loaded, HTML length: ${html.length}`)
         // Always use ticket number and subject in the email subject
         const subject = `Ticket #${contextBase.ticket?.id || ''} - ${contextBase.ticket?.subject || ''}`
-        console.log(`[NotificationWorker] About to call sendEmail with subject: ${subject}`)
-        await sendEmail(user.email, subject, html)
+
+        // --- Email threading headers ---
+        let headers: Record<string, string> | undefined = undefined;
+        if (contextBase.ticket?.id) {
+          const ticketThreadId = `<ticket-${contextBase.ticket.id}@tickets.local>`;
+          const messageId = `<notification-${eventId}@tickets.local>`;
+          headers = {
+            'Message-ID': messageId,
+            'In-Reply-To': ticketThreadId,
+            'References': ticketThreadId
+          };
+        }
+        console.log(`[NotificationWorker] About to call sendEmail with subject: ${subject} and headers:`, headers)
+        await sendEmail(user.email, subject, html, headers)
         console.log(`[NotificationWorker] sendEmail call completed`)
         await prisma.notificationRecipient.update({
           where: { eventId_userId: { eventId, userId: user.id } },
