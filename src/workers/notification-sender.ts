@@ -54,9 +54,21 @@ new Worker('notifications', async job => {
     return
   }
 
+  // Fetch ticket priority for TICKET_CREATED events
+  let ticketPriorityId = undefined;
+  if (event.type === 'TICKET_CREATED' && event.onThread) {
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: event.onThread.ticketId },
+      select: { currentPriorityId: true }
+    });
+    ticketPriorityId = ticket?.currentPriorityId;
+    console.log(`[NotificationWorker] Fetched ticket priority for TICKET_CREATED:`, ticketPriorityId);
+  }
+
   for (const r of event.recipients) {
     const user = r.user
-    const contextBase = buildContext(user, event)
+    // Pass ticketPriorityId into context for TICKET_CREATED
+    const contextBase = buildContext(user, event, ticketPriorityId)
 
     // --- Patch: If this is a TICKET_THREAD_NEW, check if it's the first thread for the ticket ---
     let effectiveEventType = event.type
@@ -92,6 +104,7 @@ new Worker('notifications', async job => {
     if (!r.emailNotified && emailPrefs) {
       console.log(`[NotificationWorker] Checking email rules for user ${user.email} (userId=${user.id}) and eventType=${eventKey}`)
       const matchedRules = getMatchingRules(emailPrefs, eventKey, contextBase)
+      console.log(`[NotificationWorker] Matched EMAIL rules:`, JSON.stringify(matchedRules))
       if (matchedRules.length > 0 && user.email) {
         const rule = matchedRules[0]
         console.log(`[NotificationWorker] Sending EMAIL to ${user.email} for eventType=${eventKey} (ruleId=${rule.id})`)
@@ -124,6 +137,7 @@ new Worker('notifications', async job => {
     if (!r.smsNotified && smsPrefs) {
       console.log(`[NotificationWorker] Checking SMS rules for user ${user.mobile} (userId=${user.id}) and eventType=${eventKey}`)
       const matchedRules = getMatchingRules(smsPrefs, eventKey, contextBase)
+      console.log(`[NotificationWorker] Matched SMS rules:`, JSON.stringify(matchedRules))
       if (matchedRules.length > 0 && user.mobile) {
         const rule = matchedRules[0]
         console.log(`[NotificationWorker] Sending SMS to ${user.mobile} for eventType=${eventKey} (ruleId=${rule.id})`)
@@ -162,7 +176,7 @@ async function loadTemplate(type: 'email' | 'sms', eventType: string, context: a
 }
 
 // Simple context builder for notification templates
-function buildContext(user: any, event: any) {
+function buildContext(user: any, event: any, ticketPriorityId?: number) {
   // Extract ticket and thread info from event
   let ticket = {};
   let thread = {};
@@ -176,8 +190,10 @@ function buildContext(user: any, event: any) {
       id: event.onThread.id,
       content: event.onThread.content,
     };
-    // Try to get priority from thread if available (optional, depends on schema)
-    if (event.onThread.ticketPriorityId) {
+    // Use override if provided (for TICKET_CREATED)
+    if (typeof ticketPriorityId === 'number') {
+      priority = ticketPriorityId;
+    } else if (event.onThread.ticketPriorityId) {
       priority = event.onThread.ticketPriorityId;
     }
   } else if (event.onAssignmentChange) {

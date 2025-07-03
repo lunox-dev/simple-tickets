@@ -12,12 +12,20 @@ const transporter = nodemailer.createTransport({
 })
 
 export async function sendEmail(to: string, subject: string, html: string) {
-  await transporter.sendMail({
-    from: process.env.SMTP_FROM!,
-    to,
-    subject,
-    html
-  })
+  console.log(`[sendEmail] Sending email to: ${to}, subject: ${subject}`)
+  try {
+    const result = await transporter.sendMail({
+      from: process.env.SMTP_FROM!,
+      to,
+      subject,
+      html
+    })
+    console.log(`[sendEmail] Email sent result:`, result)
+    return result
+  } catch (err) {
+    console.error(`[sendEmail] Error sending email:`, err)
+    throw err
+  }
 }
 
 export async function sendSMS(to: string, text: string) {
@@ -30,10 +38,20 @@ export async function sendSMS(to: string, text: string) {
     userName: process.env.SMS_USER!,
     password: process.env.SMS_PASS!
   }
-
-  await fetch(process.env.SMS_HOST!, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
+  console.log(`[sendSMS] Sending SMS to: ${phone}, payload:`, payload)
+  try {
+    const response = await fetch(process.env.SMS_HOST!, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    const responseBody = await response.text()
+    console.log(`[sendSMS] SMS response status: ${response.status}, body:`, responseBody)
+    return responseBody
+  } catch (err) {
+    console.error(`[sendSMS] Error sending SMS:`, err)
+    throw err
+  }
 }
+
+

@@ -37,7 +37,9 @@ type AtomicCondition = {
       if (!rule.enabled) continue
       if (!rule.eventTypes.includes(eventType)) continue
   
+      console.log(`[evaluateNotificationRules] Evaluating rule:`, JSON.stringify(rule))
       const matched = evaluateCondition(rule.conditions, context)
+      console.log(`[evaluateNotificationRules] Rule matched:`, matched)
       if (matched) return true
     }
   
@@ -51,7 +53,7 @@ type AtomicCondition = {
       }
       return evaluateAtomic(rule as AtomicCondition, context)
     })
-  
+    console.log(`[evaluateCondition] Condition:`, JSON.stringify(condition), 'Results:', results)
     return condition.operator === 'and'
       ? results.every(Boolean)
       : results.some(Boolean)
@@ -59,7 +61,7 @@ type AtomicCondition = {
   
   function evaluateAtomic(condition: AtomicCondition, context: NotificationContext): boolean {
     const actualValue = context[condition.field]
-  
+    console.log(`[evaluateAtomic] Field: ${condition.field}, Operator: ${condition.operator}, Value: ${condition.value}, Actual:`, actualValue)
     switch (condition.operator) {
       case 'equals':
         return actualValue === condition.value
