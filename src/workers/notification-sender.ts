@@ -177,11 +177,16 @@ async function loadTemplate(type: 'email' | 'sms', eventType: string, context: a
   const basePath = path.join(process.cwd(), 'src/notifications/templates', type)
   const filePath = path.join(basePath, `${eventType}.${ext}`)
   console.log(`[loadTemplate] Loading template from: ${filePath}`)
-  const template = await fs.readFile(filePath, 'utf8')
-  console.log(`[loadTemplate] Template loaded, length: ${template.length}`)
-  const resolved = resolvePlaceholders(template, context)
-  console.log(`[loadTemplate] Template resolved, length: ${resolved.length}`)
-  return resolved
+  try {
+    const template = await fs.readFile(filePath, 'utf8')
+    console.log(`[loadTemplate] Template loaded, length: ${template.length}`)
+    const resolved = resolvePlaceholders(template, context)
+    console.log(`[loadTemplate] Template resolved, length: ${resolved.length}`)
+    return resolved
+  } catch (err) {
+    console.error(`[loadTemplate] Error loading template from ${filePath}:`, err)
+    throw err
+  }
 }
 
 // Simple context builder for notification templates
