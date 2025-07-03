@@ -251,23 +251,25 @@ async function buildContext(user: any, event: any, ticketPriorityId?: number) {
     };
   }
 
-  // Check if ticket is assigned to user's teams
-  const assignedToMyTeams = ticket?.assignedTo && user.userTeams?.some((ut: any) => 
-    ut.team?.id === ticket.assignedTo?.teamId
-  );
+  // Get user's entityId and team entityIds
+  const userEntityId = user.entityId || user.id; // fallback to id if entityId not present
+  const userTeamEntityIds = (user.teams || user.userTeams || []).map((t: any) => t.entityId).filter(Boolean);
 
-  // Check if ticket is assigned to user
-  const assignedToMe = ticket?.assignedTo && user.userTeams?.some((ut: any) => 
-    ut.team?.id === ticket.assignedTo?.teamId && ut.team?.id === user.actionUserTeam?.teamId
-  );
+  // Check if ticket is assigned to the user (entity)
+  const assignedToMe = ticket?.assignedTo && ticket.assignedTo.id === userEntityId;
+
+  // Check if ticket is assigned to any of the user's teams (entity)
+  const assignedToMyTeams = ticket?.assignedTo && userTeamEntityIds.includes(ticket.assignedTo.id);
 
   return {
     user: {
       id: user.id,
+      entityId: userEntityId,
       displayName: user.displayName,
       email: user.email,
       mobile: user.mobile,
-      teams: user.userTeams?.map((ut: any) => ut.team?.name).filter(Boolean) || [],
+      teams: user.teams?.map((t: any) => t.name) || user.userTeams?.map((ut: any) => ut.team?.name).filter(Boolean) || [],
+      teamEntityIds: userTeamEntityIds,
     },
     event: {
       id: event.id,
