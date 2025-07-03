@@ -81,10 +81,8 @@ new Worker('notifications', async job => {
       }
     }
 
-    // Normalize event type for rule matching (strip TICKET_ prefix)
-    const eventKey = effectiveEventType.startsWith('TICKET_')
-      ? effectiveEventType.replace(/^TICKET_/, '')
-      : effectiveEventType
+    // Use the full event type for rule matching (do not strip TICKET_ prefix)
+    const eventKey = effectiveEventType;
 
     // Parse notification preferences if needed
     let emailPrefs: NotificationPreferences | null = null
