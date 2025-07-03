@@ -1,1 +1,0 @@
-Ticket #{{ticket.id}} - {{ticket.subject}}\nEvent: New Thread\nBy: {{thread.authorDisplayName}} ({{thread.authorEmail}}) at {{thread.createdAt}}\nPriority: {{ticket.priorityName}}\nCategory: {{ticket.categoryName}}\nStatus: {{ticket.statusName}}\nThread Content: {{notification.content}}\nRule: {{rule.description}} 
