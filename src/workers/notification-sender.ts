@@ -166,6 +166,7 @@ function buildContext(user: any, event: any) {
   // Extract ticket and thread info from event
   let ticket = {};
   let thread = {};
+  let priority = undefined;
   if (event.onThread) {
     ticket = {
       id: event.onThread.ticketId,
@@ -175,26 +176,40 @@ function buildContext(user: any, event: any) {
       id: event.onThread.id,
       content: event.onThread.content,
     };
+    // Try to get priority from thread if available (optional, depends on schema)
+    if (event.onThread.ticketPriorityId) {
+      priority = event.onThread.ticketPriorityId;
+    }
   } else if (event.onAssignmentChange) {
     ticket = {
       id: event.onAssignmentChange.ticketId,
       subject: event.onAssignmentChange.ticketSubject,
     };
+    if (event.onAssignmentChange.ticketPriorityId) {
+      priority = event.onAssignmentChange.ticketPriorityId;
+    }
   } else if (event.onPriorityChange) {
     ticket = {
       id: event.onPriorityChange.ticketId,
       subject: event.onPriorityChange.ticketSubject,
     };
+    priority = event.onPriorityChange.priorityToId;
   } else if (event.onStatusChange) {
     ticket = {
       id: event.onStatusChange.ticketId,
       subject: event.onStatusChange.ticketSubject,
     };
+    if (event.onStatusChange.ticketPriorityId) {
+      priority = event.onStatusChange.ticketPriorityId;
+    }
   } else if (event.onCategoryChange) {
     ticket = {
       id: event.onCategoryChange.ticketId,
       subject: event.onCategoryChange.ticketSubject,
     };
+    if (event.onCategoryChange.ticketPriorityId) {
+      priority = event.onCategoryChange.ticketPriorityId;
+    }
   }
   return {
     user: {
@@ -215,6 +230,7 @@ function buildContext(user: any, event: any) {
     },
     ticket,
     thread,
+    priority,
   };
 }
 

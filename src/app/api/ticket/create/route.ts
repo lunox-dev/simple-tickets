@@ -192,7 +192,7 @@ export async function POST(req: NextRequest) {
 
       const event = await tx.notificationEvent.create({
         data: {
-          type: 'TICKET_THREAD_NEW',
+          type: 'TICKET_CREATED',
           onThreadId: thread.id,
         }
       })
