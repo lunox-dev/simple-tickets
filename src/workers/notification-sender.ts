@@ -253,7 +253,13 @@ async function buildContext(user: any, event: any, ticketPriorityId?: number) {
 
   // Get user's entityId and team entityIds
   const userEntityId = user.entityId || user.id; // fallback to id if entityId not present
-  const userTeamEntityIds = (user.teams || user.userTeams || []).map((t: any) => t.entityId).filter(Boolean);
+  // Try to get all team entityIds from user.teams (teamId or entityId)
+  let userTeamEntityIds: number[] = [];
+  if (user.teams && Array.isArray(user.teams)) {
+    userTeamEntityIds = user.teams.map((t: any) => t.entityId || t.teamId).filter(Boolean);
+  } else if (user.userTeams && Array.isArray(user.userTeams)) {
+    userTeamEntityIds = user.userTeams.map((ut: any) => ut.team?.entityId || ut.teamId).filter(Boolean);
+  }
 
   // Check if ticket is assigned to the user (entity)
   const assignedToMe = ticket?.assignedTo && ticket.assignedTo.id === userEntityId;
