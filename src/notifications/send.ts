@@ -14,11 +14,14 @@ const transporter = nodemailer.createTransport({
 export async function sendEmail(to: string, subject: string, html: string) {
   console.log(`[sendEmail] Sending email to: ${to}, subject: ${subject}`)
   try {
+    // crude HTML to text fallback
+    const text = html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
     const result = await transporter.sendMail({
       from: process.env.SMTP_FROM!,
       to,
       subject,
-      html
+      html,
+      text
     })
     console.log(`[sendEmail] Email sent result:`, result)
     return result
