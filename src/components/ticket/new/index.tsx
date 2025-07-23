@@ -17,9 +17,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Loader2, AlertCircle, UploadCloud, X, Link } from "lucide-react"
+import { Loader2, AlertCircle, UploadCloud, X, Link, ArrowLeft } from "lucide-react"
 import { SimpleRichTextEditor } from "@/components/ui/SimpleRichTextEditor"
 import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
 
 // Define types for API responses
 interface Category {
@@ -87,6 +88,7 @@ interface AttachmentFile {
 }
 
 export default function NewTicketForm() {
+  const router = useRouter();
   const [title, setTitle] = useState("")
   const [body, setBody] = useState<Content>("")
 
@@ -503,6 +505,15 @@ export default function NewTicketForm() {
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-5 gap-8">
+      {/* Back to Tickets Button */}
+      <div className="xl:col-span-5 bg-white border-b border-gray-200 sticky top-0 z-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center">
+          <Button variant="outline" onClick={() => router.push("/tickets")}> 
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Tickets
+          </Button>
+        </div>
+      </div>
       {/* Main Content - Left Side */}
       <div className="xl:col-span-3 space-y-6">
         {error && (
