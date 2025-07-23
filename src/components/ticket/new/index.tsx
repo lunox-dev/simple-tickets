@@ -17,7 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Loader2, AlertCircle, UploadCloud, X, Link, ArrowLeft } from "lucide-react"
+import { Loader2, AlertCircle, UploadCloud, X, Link } from "lucide-react"
 import { SimpleRichTextEditor } from "@/components/ui/SimpleRichTextEditor"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
@@ -88,28 +88,22 @@ interface AttachmentFile {
 }
 
 export default function NewTicketForm() {
-  const router = useRouter();
+  const router = useRouter()
   const [title, setTitle] = useState("")
   const [body, setBody] = useState<Content>("")
-
   const [categories, setCategories] = useState<Category[]>([])
   const [flatCategories, setFlatCategories] = useState<FlatCategory[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string>("")
-
   const [priorities, setPriorities] = useState<Priority[]>([])
   const [selectedPriority, setSelectedPriority] = useState<string>("")
-
   const [statuses, setStatuses] = useState<Status[]>([])
   const [selectedStatus, setSelectedStatus] = useState<string>("")
-
   const [entities, setEntities] = useState<Entity[]>([])
   const [flatEntities, setFlatEntities] = useState<FlatEntity[]>([])
   const [selectedEntity, setSelectedEntity] = useState<string>("")
-
   const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([])
   const [customFieldValues, setCustomFieldValues] = useState<Record<number, string>>({})
   const [customFieldErrors, setCustomFieldErrors] = useState<Record<number, string>>({})
-
   const [attachments, setAttachments] = useState<AttachmentFile[]>([])
 
   // URL Dialog state
@@ -126,10 +120,8 @@ export default function NewTicketForm() {
   // Function to flatten categories into a single list with full paths and hierarchy
   const flattenCategories = (categories: Category[], parentPath: string[] = [], level = 0): FlatCategory[] => {
     let result: FlatCategory[] = []
-
     categories.forEach((category) => {
       const currentPath = [...parentPath, category.name]
-
       // Add current category (both parent and leaf categories are selectable)
       result.push({
         id: category.id,
@@ -137,23 +129,19 @@ export default function NewTicketForm() {
         fullPath: currentPath.join(" > "),
         level,
       })
-
       // Recursively add children
       if (category.children && category.children.length > 0) {
         result = result.concat(flattenCategories(category.children, currentPath, level + 1))
       }
     })
-
     return result
   }
 
   // Function to flatten entities into a single list with full paths
   const flattenEntities = (entities: Entity[], parentPath: string[] = [], level = 0): FlatEntity[] => {
     let result: FlatEntity[] = []
-
     entities.forEach((entity) => {
       const currentPath = [...parentPath, entity.name]
-
       // Add current entity
       result.push({
         entityId: entity.entityId,
@@ -162,13 +150,11 @@ export default function NewTicketForm() {
         fullPath: currentPath.join(" > "),
         level,
       })
-
       // Recursively add children
       if (entity.children && entity.children.length > 0) {
         result = result.concat(flattenEntities(entity.children, currentPath, level + 1))
       }
     })
-
     return result
   }
 
@@ -279,6 +265,7 @@ export default function NewTicketForm() {
         setError(err instanceof Error ? err.message : "An unknown error occurred")
       }
     }
+
     fetchData()
   }, [])
 
@@ -294,7 +281,6 @@ export default function NewTicketForm() {
           }
           const data: CustomFieldDefinition[] = await res.json()
           setCustomFields(data)
-
           const initialValues: Record<number, string> = {}
           data.forEach((field) => {
             initialValues[field.id] = ""
@@ -362,7 +348,6 @@ export default function NewTicketForm() {
     try {
       // Validate URL
       new URL(urlValue)
-
       const newAttachment: AttachmentFile = {
         id: Math.random().toString(36).substring(2, 15),
         name: urlName.trim(),
@@ -398,18 +383,22 @@ export default function NewTicketForm() {
       setError("Title and Body are required.")
       return
     }
+
     if (!selectedCategory) {
       setError("Please select a category.")
       return
     }
+
     if (!selectedEntity) {
       setError("Please assign the ticket.")
       return
     }
+
     if (!selectedStatus) {
       setError("Please select a status.")
       return
     }
+
     if (!selectedPriority) {
       setError("Please select a priority.")
       return
@@ -505,15 +494,6 @@ export default function NewTicketForm() {
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-5 gap-8">
-      {/* Back to Tickets Button */}
-      <div className="xl:col-span-5 bg-white border-b border-gray-200 sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center">
-          <Button variant="outline" onClick={() => router.push("/tickets")}> 
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Tickets
-          </Button>
-        </div>
-      </div>
       {/* Main Content - Left Side */}
       <div className="xl:col-span-3 space-y-6">
         {error && (
@@ -523,6 +503,7 @@ export default function NewTicketForm() {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+
         {successMessage && (
           <Alert variant="default" className="bg-green-100 border-green-400 text-green-700">
             <AlertCircle className="h-4 w-4" />
@@ -610,7 +591,7 @@ export default function NewTicketForm() {
                   <DialogTrigger asChild>
                     <Button
                       variant="outline"
-                      className="h-20 border-2 border-dashed hover:bg-muted transition-colors"
+                      className="h-20 border-2 border-dashed hover:bg-muted transition-colors bg-transparent"
                       type="button"
                     >
                       <div className="flex items-center justify-center space-x-2">
