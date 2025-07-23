@@ -33,7 +33,7 @@ model User {
 
   emailOtps      EmailOTP[]
 }
-
+  
 model Team {
   id                        Int                                 @id @default(autoincrement())
   priority                  Int
