@@ -1,1 +1,6 @@
-Ticket #{{ticket.id}} - {{ticket.subject}}\nEvent: Category Changed\nBy: {{change.changedByDisplayName}} ({{change.changedByEmail}}) at {{change.changedAt}}\nCategory: {{change.fromName}} -> {{change.toName}}\nPriority: {{ticket.priorityName}}\nStatus: {{ticket.statusName}}\nContent: {{notification.content}}\nRule: {{rule.description}} 
+Ticket #{{ticket.id}} - {{ticket.subject}}
+Category changed: {{change.fromName}} → {{change.toName}}
+By: {{change.changedByDisplayName}} at {{change.changedAt}}
+Priority: {{ticket.priorityName}}
+Status: {{ticket.statusName}}
+{{notification.content}} 
