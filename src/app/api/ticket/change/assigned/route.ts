@@ -55,14 +55,15 @@ export async function POST(req: NextRequest) {
   }
 
   const fromUserTeamId = safeTicket.currentAssignedTo?.userTeamId ?? 0
-  const canChange = hasChangePermission(access, safeTicket, 'assigned', fromUserTeamId, 0) // Assuming userTeamId is not passed in this endpoint
-  if (!canChange) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
   const toEntity = await prisma.entity.findUnique({ where: { id: entityId } })
   if (!toEntity) {
     return NextResponse.json({ error: 'Target entity not found' }, { status: 404 })
+  }
+
+  const toUserTeamId = toEntity.userTeamId ?? 0
+  const canChange = hasChangePermission(access, safeTicket, 'assigned', fromUserTeamId, toUserTeamId)
+  if (!canChange) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   try {
