@@ -61,7 +61,17 @@ export async function POST(req: NextRequest) {
   }
 
   const toUserTeamId = toEntity.userTeamId ?? 0
+  console.log('=== ASSIGNMENT CHANGE DEBUG ===')
+  console.log('Access:', JSON.stringify(access, null, 2))
+  console.log('SafeTicket:', JSON.stringify(safeTicket, null, 2))
+  console.log('FromUserTeamId:', fromUserTeamId)
+  console.log('ToUserTeamId:', toUserTeamId)
+  console.log('ToEntity:', JSON.stringify(toEntity, null, 2))
+  
   const canChange = hasChangePermission(access, safeTicket, 'assigned', fromUserTeamId, toUserTeamId)
+  console.log('CanChange:', canChange)
+  console.log('=== END DEBUG ===')
+  
   if (!canChange) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
