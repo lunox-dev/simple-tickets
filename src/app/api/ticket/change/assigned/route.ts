@@ -14,9 +14,9 @@ export async function POST(req: NextRequest) {
   const userId = Number((session.user as any).id)
   const actingAs = (session.user as any).actingAs
 
-  const { ticketId, userTeamId, teamId } = await req.json()
-  if (!ticketId || !teamId) {
-    return NextResponse.json({ error: 'Missing ticketId or teamId' }, { status: 400 })
+  const { ticketId, entityId } = await req.json()
+  if (!ticketId || !entityId) {
+    return NextResponse.json({ error: 'Missing ticketId or entityId' }, { status: 400 })
   }
 
   const access = await getTicketAccessForUser(userId, ticketId)
@@ -55,14 +55,12 @@ export async function POST(req: NextRequest) {
   }
 
   const fromUserTeamId = safeTicket.currentAssignedTo?.userTeamId ?? 0
-  const canChange = hasChangePermission(access, safeTicket, 'assigned', fromUserTeamId, userTeamId ?? 0)
+  const canChange = hasChangePermission(access, safeTicket, 'assigned', fromUserTeamId, 0) // Assuming userTeamId is not passed in this endpoint
   if (!canChange) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const toEntity = await prisma.entity.findFirst({
-    where: { OR: [{ userTeamId }, { teamId }] },
-  })
+  const toEntity = await prisma.entity.findUnique({ where: { id: entityId } })
   if (!toEntity) {
     return NextResponse.json({ error: 'Target entity not found' }, { status: 404 })
   }

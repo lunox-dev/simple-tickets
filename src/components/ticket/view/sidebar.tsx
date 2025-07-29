@@ -366,12 +366,7 @@ export default function TicketSidebar({ ticket, userPermissions, onTicketUpdate,
 
       const payload: any = {
         ticketId: ticket.id,
-      }
-
-      if (entity.type === "team") {
-        payload.teamId = Number.parseInt(entity.entityId, 10)
-      } else {
-        payload.userTeamId = Number.parseInt(entity.entityId, 10)
+        entityId: Number.parseInt(entity.entityId, 10),
       }
 
       const response = await fetch("/api/ticket/change/assigned", {
