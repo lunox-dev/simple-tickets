@@ -2,9 +2,53 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma } from '@/lib/prisma'
-import { getTicketAccessForUser } from '@/lib/access-ticket-user'
-import { hasChangePermission } from '@/lib/access-ticket-change'
 import { enqueueNotificationInit } from '@/lib/notification-queue'
+
+// Function to check if user has assignment change permission
+function hasAssignmentChangePermission(
+  userTeams: any[],
+  fromUserTeamId: number,
+  toUserTeamId: number
+): boolean {
+  for (const team of userTeams) {
+    const combinedPerms = [
+      ...team.userTeamPermissions.map((p: any) => ({ from: 'userTeam' as const, value: p })),
+      ...team.permissions.map((p: any) => ({ from: 'team' as const, value: p }))
+    ]
+    
+    for (const perm of combinedPerms) {
+      const parts = perm.value.split(':')
+      
+      // Check for ticket:action:change:assigned:any
+      if (parts[0] === 'ticket' && parts[1] === 'action' && parts[2] === 'change' && parts[3] === 'assigned') {
+        if (parts[4] === 'any') {
+          return true // Can assign to anyone
+        }
+        
+        // Check for specific assignment permissions like ticket:action:change:assigned:from:own:to:any:assigned:own
+        if (parts[4] === 'from' && parts[6] === 'to') {
+          const pFrom = parts[5]
+          const pTo = parts[7]
+          const pContext = parts[8]
+          const pScope = parts[9]
+          
+          // Check if from condition matches
+          if (pFrom === 'any' || (pFrom === 'own' && fromUserTeamId === team.userTeamId)) {
+            // Check if to condition matches
+            if (pTo === 'any' || (pTo === 'own' && toUserTeamId === team.userTeamId)) {
+              // Check context and scope
+              if (pContext === 'assigned' && (pScope === 'any' || pScope === 'own')) {
+                return true
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  return false
+}
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -19,11 +63,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing ticketId or entityId' }, { status: 400 })
   }
 
-  const access = await getTicketAccessForUser(userId, ticketId)
-  if (!access) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
+  // Get ticket details
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
     include: {
@@ -35,40 +75,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
   }
 
-  // Convert nulls to undefined for type compatibility
-  const safeTicket = {
-    ...ticket,
-    currentAssignedTo: ticket.currentAssignedTo
-      ? {
-          ...ticket.currentAssignedTo,
-          userTeamId: ticket.currentAssignedTo.userTeamId ?? undefined,
-          teamId: ticket.currentAssignedTo.teamId ?? undefined,
-        }
-      : null,
-    createdBy: ticket.createdBy
-      ? {
-          ...ticket.createdBy,
-          userTeamId: ticket.createdBy.userTeamId ?? undefined,
-          teamId: ticket.createdBy.teamId ?? undefined,
-        }
-      : null,
-  }
-
-  const fromUserTeamId = safeTicket.currentAssignedTo?.userTeamId ?? 0
+  // Get target entity
   const toEntity = await prisma.entity.findUnique({ where: { id: entityId } })
   if (!toEntity) {
     return NextResponse.json({ error: 'Target entity not found' }, { status: 404 })
   }
 
+  // Get from and to userTeamIds
+  const fromUserTeamId = ticket.currentAssignedTo?.userTeamId ?? 0
   const toUserTeamId = toEntity.userTeamId ?? 0
+
+  // Check assignment change permission
+  const userTeams = session.user.teams.map((t: any) => ({
+    userTeamId: t.userTeamId,
+    userTeamPermissions: t.userTeamPermissions,
+    permissions: t.permissions
+  }))
+  
+  const canChange = hasAssignmentChangePermission(userTeams, fromUserTeamId, toUserTeamId)
+  
   console.log('=== ASSIGNMENT CHANGE DEBUG ===')
-  console.log('Access:', JSON.stringify(access, null, 2))
-  console.log('SafeTicket:', JSON.stringify(safeTicket, null, 2))
   console.log('FromUserTeamId:', fromUserTeamId)
   console.log('ToUserTeamId:', toUserTeamId)
-  console.log('ToEntity:', JSON.stringify(toEntity, null, 2))
-  
-  const canChange = hasChangePermission(access, safeTicket, 'assigned', fromUserTeamId, toUserTeamId)
+  console.log('UserTeams:', JSON.stringify(userTeams, null, 2))
   console.log('CanChange:', canChange)
   console.log('=== END DEBUG ===')
   
