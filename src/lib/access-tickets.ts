@@ -107,9 +107,7 @@ export async function getAccessibleTicketsByUser(
         const conds: any[] = []
         if (p.type === 'assignment') {
           if (p.permission === 'ticket:read:assigned:any') {
-            conds.push({})
-            // Entity-aware: also allow if currentAssignedToId is in allEntityIds
-            if (allEntityIds.length > 0) conds.push({ currentAssignedToId: { in: allEntityIds } })
+            conds.push({}) // Get ALL tickets assigned to anyone
           } else if (p.permission === 'ticket:read:assigned:team:any') {
             conds.push({ currentAssignedTo: { teamId: p.teamId } })
             // Entity-aware: also allow if currentAssignedToId is the team entity
@@ -128,9 +126,7 @@ export async function getAccessibleTicketsByUser(
           }
         } else if (p.type === 'creation') {
           if (p.permission === 'ticket:read:createdby:any') {
-            conds.push({})
-            // Entity-aware: also allow if createdById is in allEntityIds
-            if (allEntityIds.length > 0) conds.push({ createdById: { in: allEntityIds } })
+            conds.push({}) // Get ALL tickets created by anyone
           } else if (p.permission === 'ticket:read:createdby:team:any') {
             conds.push({ createdBy: { teamId: p.teamId } })
             // Entity-aware: also allow if createdById is the team entity
