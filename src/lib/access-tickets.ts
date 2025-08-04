@@ -63,28 +63,7 @@ export async function getAccessibleTicketsByUser(
     }
   }
 
-  // Check for synthetic access via ticket:action:*:any permissions
-  const actionPerms: string[] = []
-  for (const ut of userTeams) {
-    const combinedPerms = [
-      ...ut.permissions.map((p: any) => ({ from: 'userTeam' as const, value: p })),
-      ...ut.teamPermissions.map((p: any) => ({ from: 'team' as const, value: p }))
-    ]
-    
-    for (const perm of combinedPerms) {
-      if (perm.value.startsWith('ticket:action:') && perm.value.includes(':any')) {
-        actionPerms.push(perm.value)
-      }
-    }
-  }
-
-  // If user has any ticket:action:*:any permission, grant access to all tickets
-  const hasAnyActionAny = actionPerms.some(p => {
-    const parts = p.split(":");
-    return parts[0] === 'ticket' && parts[1] === 'action' && parts.includes('any');
-  });
-
-  if (userTeamPerms.length === 0 && !hasAnyActionAny) return { userId, tickets: [] }
+  if (userTeamPerms.length === 0) return { userId, tickets: [] }
 
   // Fetch entity IDs for user's UserTeams and Teams
   const userTeamIds = userTeams.map((ut: any) => ut.id)
@@ -97,51 +76,46 @@ export async function getAccessibleTicketsByUser(
   const teamEntityIds = teamEntities.map(e => e.id)
   const allEntityIds = [...userTeamEntityIds, ...teamEntityIds]
 
-  // Build WHERE clause - if user has synthetic access, get all tickets
-  let whereClause: any = {}
-  if (hasAnyActionAny) {
-    whereClause = {} // Get all tickets
-  } else {
-    whereClause = {
-      OR: userTeamPerms.flatMap(p => {
-        const conds: any[] = []
-        if (p.type === 'assignment') {
-          if (p.permission === 'ticket:read:assigned:any') {
-            conds.push({}) // Get ALL tickets assigned to anyone
-          } else if (p.permission === 'ticket:read:assigned:team:any') {
-            conds.push({ currentAssignedTo: { teamId: p.teamId } })
-            // Entity-aware: also allow if currentAssignedToId is the team entity
-            const teamEntity = teamEntities.find(e => e.teamId === p.teamId)
-            if (teamEntity) conds.push({ currentAssignedToId: teamEntity.id })
-          } else if (p.permission === 'ticket:read:assigned:team:unclaimed') {
-            conds.push({ currentAssignedTo: { teamId: p.teamId, userTeamId: null } })
-            // Entity-aware: also allow if currentAssignedToId is the team entity and unclaimed
-            const teamEntity = teamEntities.find(e => e.teamId === p.teamId)
-            if (teamEntity) conds.push({ currentAssignedToId: teamEntity.id })
-          } else if (p.permission === 'ticket:read:assigned:self') {
-            conds.push({ currentAssignedTo: { userTeamId: p.userTeamId } })
-            // Entity-aware: also allow if currentAssignedToId is the userTeam entity
-            const utEntity = userTeamEntities.find(e => e.userTeamId === p.userTeamId)
-            if (utEntity) conds.push({ currentAssignedToId: utEntity.id })
-          }
-        } else if (p.type === 'creation') {
-          if (p.permission === 'ticket:read:createdby:any') {
-            conds.push({}) // Get ALL tickets created by anyone
-          } else if (p.permission === 'ticket:read:createdby:team:any') {
-            conds.push({ createdBy: { teamId: p.teamId } })
-            // Entity-aware: also allow if createdById is the team entity
-            const teamEntity = teamEntities.find(e => e.teamId === p.teamId)
-            if (teamEntity) conds.push({ createdById: teamEntity.id })
-          } else if (p.permission === 'ticket:read:createdby:self') {
-            conds.push({ createdBy: { userTeamId: p.userTeamId } })
-            // Entity-aware: also allow if createdById is the userTeam entity
-            const utEntity = userTeamEntities.find(e => e.userTeamId === p.userTeamId)
-            if (utEntity) conds.push({ createdById: utEntity.id })
-          }
+  // Build WHERE clause - only use explicit read permissions
+  const whereClause = {
+    OR: userTeamPerms.flatMap(p => {
+      const conds: any[] = []
+      if (p.type === 'assignment') {
+        if (p.permission === 'ticket:read:assigned:any') {
+          conds.push({}) // Get ALL tickets assigned to anyone
+        } else if (p.permission === 'ticket:read:assigned:team:any') {
+          conds.push({ currentAssignedTo: { teamId: p.teamId } })
+          // Entity-aware: also allow if currentAssignedToId is the team entity
+          const teamEntity = teamEntities.find(e => e.teamId === p.teamId)
+          if (teamEntity) conds.push({ currentAssignedToId: teamEntity.id })
+        } else if (p.permission === 'ticket:read:assigned:team:unclaimed') {
+          conds.push({ currentAssignedTo: { teamId: p.teamId, userTeamId: null } })
+          // Entity-aware: also allow if currentAssignedToId is the team entity and unclaimed
+          const teamEntity = teamEntities.find(e => e.teamId === p.teamId)
+          if (teamEntity) conds.push({ currentAssignedToId: teamEntity.id })
+        } else if (p.permission === 'ticket:read:assigned:self') {
+          conds.push({ currentAssignedTo: { userTeamId: p.userTeamId } })
+          // Entity-aware: also allow if currentAssignedToId is the userTeam entity
+          const utEntity = userTeamEntities.find(e => e.userTeamId === p.userTeamId)
+          if (utEntity) conds.push({ currentAssignedToId: utEntity.id })
         }
-        return conds
-      })
-    }
+      } else if (p.type === 'creation') {
+        if (p.permission === 'ticket:read:createdby:any') {
+          conds.push({}) // Get ALL tickets created by anyone
+        } else if (p.permission === 'ticket:read:createdby:team:any') {
+          conds.push({ createdBy: { teamId: p.teamId } })
+          // Entity-aware: also allow if createdById is the team entity
+          const teamEntity = teamEntities.find(e => e.teamId === p.teamId)
+          if (teamEntity) conds.push({ createdById: teamEntity.id })
+        } else if (p.permission === 'ticket:read:createdby:self') {
+          conds.push({ createdBy: { userTeamId: p.userTeamId } })
+          // Entity-aware: also allow if createdById is the userTeam entity
+          const utEntity = userTeamEntities.find(e => e.userTeamId === p.userTeamId)
+          if (utEntity) conds.push({ createdById: utEntity.id })
+        }
+      }
+      return conds
+    })
   }
 
   // Get relevant ticket matches
@@ -196,25 +170,6 @@ export async function getAccessibleTicketsByUser(
           })
         }
       }
-    }
-
-    // Check synthetic access via ticket:action:*:any permissions
-    if (ways.length === 0 && hasAnyActionAny) {
-      // Add synthetic access for both assignment and creation
-      ways.push({
-        userTeamId: 0,
-        teamId: 0,
-        from: 'userTeam',
-        permission: 'ticket:action:any',
-        type: 'assignment'
-      })
-      ways.push({
-        userTeamId: 0,
-        teamId: 0,
-        from: 'userTeam',
-        permission: 'ticket:action:any',
-        type: 'creation'
-      })
     }
 
     if (ways.length > 0) {
