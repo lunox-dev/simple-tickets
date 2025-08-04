@@ -63,7 +63,28 @@ export async function getAccessibleTicketsByUser(
     }
   }
 
-  if (userTeamPerms.length === 0) return { userId, tickets: [] }
+  // Check for synthetic access via ticket:action:*:any permissions
+  const actionPerms: string[] = []
+  for (const ut of userTeams) {
+    const combinedPerms = [
+      ...ut.permissions.map((p: any) => ({ from: 'userTeam' as const, value: p })),
+      ...ut.teamPermissions.map((p: any) => ({ from: 'team' as const, value: p }))
+    ]
+    
+    for (const perm of combinedPerms) {
+      if (perm.value.startsWith('ticket:action:') && perm.value.includes(':any')) {
+        actionPerms.push(perm.value)
+      }
+    }
+  }
+
+  // If user has any ticket:action:*:any permission, grant access to all tickets
+  const hasAnyActionAny = actionPerms.some(p => {
+    const parts = p.split(":");
+    return parts[0] === 'ticket' && parts[1] === 'action' && parts.includes('any');
+  });
+
+  if (userTeamPerms.length === 0 && !hasAnyActionAny) return { userId, tickets: [] }
 
   // Fetch entity IDs for user's UserTeams and Teams
   const userTeamIds = userTeams.map((ut: any) => ut.id)
@@ -76,9 +97,12 @@ export async function getAccessibleTicketsByUser(
   const teamEntityIds = teamEntities.map(e => e.id)
   const allEntityIds = [...userTeamEntityIds, ...teamEntityIds]
 
-  // Get relevant ticket matches (entity-aware)
-  const tickets = await prisma.ticket.findMany({
-    where: {
+  // Build WHERE clause - if user has synthetic access, get all tickets
+  let whereClause: any = {}
+  if (hasAnyActionAny) {
+    whereClause = {} // Get all tickets
+  } else {
+    whereClause = {
       OR: userTeamPerms.flatMap(p => {
         const conds: any[] = []
         if (p.type === 'assignment') {
@@ -121,7 +145,12 @@ export async function getAccessibleTicketsByUser(
         }
         return conds
       })
-    },
+    }
+  }
+
+  // Get relevant ticket matches
+  const tickets = await prisma.ticket.findMany({
+    where: whereClause,
     select: {
       id: true,
       currentAssignedTo: { select: { teamId: true, userTeamId: true } },
@@ -136,6 +165,7 @@ export async function getAccessibleTicketsByUser(
   for (const ticket of tickets) {
     const ways: AccessibleTicket['accessVia'] = []
 
+    // Check explicit read permissions
     for (const rule of userTeamPerms) {
       const assigned = ticket.currentAssignedTo
       const created = ticket.createdBy
@@ -170,6 +200,25 @@ export async function getAccessibleTicketsByUser(
           })
         }
       }
+    }
+
+    // Check synthetic access via ticket:action:*:any permissions
+    if (ways.length === 0 && hasAnyActionAny) {
+      // Add synthetic access for both assignment and creation
+      ways.push({
+        userTeamId: 0,
+        teamId: 0,
+        from: 'userTeam',
+        permission: 'ticket:action:any',
+        type: 'assignment'
+      })
+      ways.push({
+        userTeamId: 0,
+        teamId: 0,
+        from: 'userTeam',
+        permission: 'ticket:action:any',
+        type: 'creation'
+      })
     }
 
     if (ways.length > 0) {
