@@ -1,0 +1,6 @@
+Ticket #{{ticket.id}} - {{ticket.subject}}
+New thread by: {{thread.authorDisplayName}} at {{thread.createdAt}}
+Priority: {{ticket.priorityName}}
+Category: {{ticket.categoryName}}
+Status: {{ticket.statusName}}
+{{notification.content}}
