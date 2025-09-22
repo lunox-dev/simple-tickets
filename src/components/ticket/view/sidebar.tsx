@@ -1,12 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Loader2,
   User,
@@ -18,8 +21,12 @@ import {
   Calendar,
   X,
   Settings,
+  ChevronsUpDown,
+  Check,
+  Users,
 } from "lucide-react"
 import { format } from "date-fns"
+import { cn } from "@/lib/utils"
 
 interface TicketData {
   id: number
@@ -91,6 +98,8 @@ export default function TicketSidebar({ ticket, userPermissions, onTicketUpdate,
   const [isLoading, setIsLoading] = useState(true)
   const [isUpdating, setIsUpdating] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [assignSearch, setAssignSearch] = useState("")
 
   // Helper function to get contrasting text color
   const getContrastColor = (hexColor: string) => {
@@ -388,6 +397,24 @@ export default function TicketSidebar({ ticket, userPermissions, onTicketUpdate,
     }
   }
 
+  const filteredEntities = useMemo(() => {
+    if (!assignSearch) return flatEntities
+    return flatEntities.filter(
+      (entity) =>
+        entity.name.toLowerCase().includes(assignSearch.toLowerCase()) ||
+        entity.fullPath.toLowerCase().includes(assignSearch.toLowerCase()),
+    )
+  }, [flatEntities, assignSearch])
+
+  const getEntityInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((word) => word[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2)
+  }
+
   const handleClaimTicket = async () => {
     setIsUpdating("claim")
     setError(null)
@@ -545,30 +572,115 @@ export default function TicketSidebar({ ticket, userPermissions, onTicketUpdate,
             </div>
 
             {canChangeAssignment() ? (
-              <Select
-                value={ticket.currentAssignedTo?.entityId.toString() || ""}
-                onValueChange={handleAssignmentChange}
-                disabled={isUpdating === "assignment"}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Unassigned">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm">{ticket.currentAssignedTo?.name || "Unassigned"}</span>
-                      {isUpdating === "assignment" && <Loader2 className="h-3 w-3 animate-spin ml-auto" />}
-                    </div>
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="w-[350px] max-h-[200px]">
-                  {flatEntities.map((entity) => (
-                    <SelectItem key={entity.entityId} value={entity.entityId}>
-                      <span className="block w-full">
-                        {"\u00A0".repeat(entity.level * 4)}
-                        {entity.name} ({entity.type})
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={assignOpen} onOpenChange={setAssignOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={assignOpen}
+                    className="w-full justify-between h-10 bg-white"
+                    disabled={isUpdating === "assignment"}
+                  >
+                    {ticket.currentAssignedTo?.entityId ? (
+                      <div className="flex items-center gap-2 truncate">
+                        <Avatar className="h-6 w-6">
+                          <AvatarFallback className="text-xs">
+                            {getEntityInitials(
+                              flatEntities.find((e) => e.entityId === ticket.currentAssignedTo?.entityId.toString())?.name ||
+                                "",
+                            )}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="truncate">
+                          {
+                            flatEntities.find((e) => e.entityId === ticket.currentAssignedTo?.entityId.toString())
+                              ?.fullPath
+                          }
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">Select team or user...</span>
+                    )}
+                    {isUpdating === "assignment" ? (
+                      <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin" />
+                    ) : (
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Search teams and users..."
+                      value={assignSearch}
+                      onValueChange={setAssignSearch}
+                    />
+                    <CommandList>
+                      <CommandEmpty>No teams or users found.</CommandEmpty>
+                      <CommandGroup>
+                        {filteredEntities.map((entity, idx) => (
+                          <CommandItem
+                            key={entity.entityId}
+                            value={entity.entityId}
+                            onSelect={(currentValue) => {
+                              handleAssignmentChange(currentValue)
+                              setAssignOpen(false)
+                              setAssignSearch("")
+                            }}
+                            className={cn(
+                              "cursor-pointer",
+                              entity.type === "team"
+                                ? "bg-slate-50 dark:bg-slate-900 font-medium"
+                                : "pl-2 border-l-2 border-slate-200 dark:border-slate-700",
+                              entity.type === "team" && idx > 0
+                                ? "mt-1 pt-1 border-t border-slate-200 dark:border-slate-700"
+                                : "",
+                            )}
+                          >
+                            <div className="flex items-center gap-3 w-full">
+                              <Avatar className="h-8 w-8">
+                                <AvatarFallback className="text-xs">{getEntityInitials(entity.name)}</AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium truncate">
+                                    {"\u00A0".repeat(entity.level * 2)}
+                                    {entity.name}
+                                  </span>
+                                  <Badge variant={entity.type === "team" ? "default" : "secondary"} className="text-xs">
+                                    {entity.type === "team" ? (
+                                      <>
+                                        <Users className="h-3 w-3 mr-1" />
+                                        Team
+                                      </>
+                                    ) : (
+                                      <>
+                                        <User className="h-3 w-3 mr-1" />
+                                        User
+                                      </>
+                                    )}
+                                  </Badge>
+                                </div>
+                                {entity.level > 0 && (
+                                  <p className="text-xs text-muted-foreground truncate">{entity.fullPath}</p>
+                                )}
+                              </div>
+                              <Check
+                                className={cn(
+                                  "ml-auto h-4 w-4",
+                                  ticket.currentAssignedTo?.entityId.toString() === entity.entityId
+                                    ? "opacity-100"
+                                    : "opacity-0",
+                                )}
+                              />
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             ) : (
               <div className="p-2 bg-gray-50 rounded-md">
                 <span className="text-sm">{ticket.currentAssignedTo?.name || "Unassigned"}</span>

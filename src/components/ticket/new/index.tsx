@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, type ChangeEvent, type FormEvent } from "react"
+import { useState, useEffect, useCallback, useMemo, type ChangeEvent, type FormEvent } from "react"
 import type { Content } from "@tiptap/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,6 +8,11 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Separator } from "@/components/ui/separator"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   Dialog,
   DialogContent,
@@ -17,10 +22,25 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Loader2, AlertCircle, UploadCloud, X, Link } from "lucide-react"
+import {
+  Loader2,
+  AlertCircle,
+  UploadCloud,
+  X,
+  Link,
+  Check,
+  ChevronsUpDown,
+  Users,
+  User,
+  FileText,
+  Calendar,
+  Flag,
+  Target,
+} from "lucide-react"
 import { SimpleRichTextEditor } from "@/components/ui/SimpleRichTextEditor"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { cn } from "@/lib/utils"
 
 // Define types for API responses
 interface Category {
@@ -105,6 +125,9 @@ export default function NewTicketForm() {
   const [customFieldValues, setCustomFieldValues] = useState<Record<number, string>>({})
   const [customFieldErrors, setCustomFieldErrors] = useState<Record<number, string>>({})
   const [attachments, setAttachments] = useState<AttachmentFile[]>([])
+
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [assignSearch, setAssignSearch] = useState("")
 
   // URL Dialog state
   const [urlDialogOpen, setUrlDialogOpen] = useState(false)
@@ -492,313 +515,486 @@ export default function NewTicketForm() {
     }
   }
 
+  const filteredEntities = useMemo(() => {
+    if (!assignSearch) return flatEntities
+    return flatEntities.filter(
+      (entity) =>
+        entity.name.toLowerCase().includes(assignSearch.toLowerCase()) ||
+        entity.fullPath.toLowerCase().includes(assignSearch.toLowerCase()),
+    )
+  }, [flatEntities, assignSearch])
+
+  const getEntityInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((word) => word[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2)
+  }
+
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-5 gap-8">
-      {/* Main Content - Left Side */}
-      <div className="xl:col-span-3 space-y-6">
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+      <div className="container mx-auto p-6 max-w-7xl">
+        <div className="mb-8">
+        </div>
 
-        {successMessage && (
-          <Alert variant="default" className="bg-green-100 border-green-400 text-green-700">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Success</AlertTitle>
-            <AlertDescription>{successMessage}</AlertDescription>
-          </Alert>
-        )}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+          {/* Main Content - Left Side */}
+          <div className="xl:col-span-2 space-y-6">
+            {error && (
+              <Alert variant="destructive" className="border-red-200 bg-red-50 dark:bg-red-950/50">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Title */}
-          <div className="space-y-2">
-            <Label htmlFor="title" className="text-lg font-medium">
-              Title
-            </Label>
-            <Input
-              id="title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Enter ticket title"
-              className="text-lg"
-              required
-            />
-          </div>
+            {successMessage && (
+              <Alert className="border-green-200 bg-green-50 dark:bg-green-950/50 text-green-800 dark:text-green-200">
+                <Check className="h-4 w-4" />
+                <AlertTitle>Success</AlertTitle>
+                <AlertDescription>{successMessage}</AlertDescription>
+              </Alert>
+            )}
 
-          {/* Custom Fields - Between Title and Description */}
-          {customFields.length > 0 && (
-            <div className="space-y-4">
-              {customFields.map((field) => (
-                <div key={field.id} className="space-y-2">
-                  <Label htmlFor={`custom-field-${field.id}`}>
-                    {field.label}
-                    {field.required && <span className="text-red-500 ml-1">*</span>}
-                  </Label>
-                  <Input
-                    id={`custom-field-${field.id}`}
-                    value={customFieldValues[field.id] || ""}
-                    onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
-                    placeholder={`Enter ${field.label}`}
-                    pattern={field.regex || undefined}
-                    required={field.required}
-                  />
-                  {customFieldErrors[field.id] && <p className="text-sm text-red-500">{customFieldErrors[field.id]}</p>}
-                </div>
-              ))}
-            </div>
-          )}
+            <Card className="shadow-lg border-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xl">Ticket Details</CardTitle>
+                <CardDescription>Provide the essential information for your ticket</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Title */}
+                  <div className="space-y-3">
+                    <Label htmlFor="title" className="text-base font-medium flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Title
+                    </Label>
+                    <Input
+                      id="title"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="Enter a clear, descriptive title for your ticket"
+                      className="text-base h-12 bg-white dark:bg-slate-900"
+                      required
+                    />
+                  </div>
 
-          {/* Body */}
-          <div className="space-y-2">
-            <Label className="text-lg font-medium">Description</Label>
-            <SimpleRichTextEditor
-              value={typeof body === "string" ? body : ""}
-              onChange={setBody}
-              placeholder="Describe the issue or request in detail"
-              className="min-h-[200px] w-full"
-              editorContentClassName="p-5 rounded"
-              autofocus
-              editable
-            />
-          </div>
+                  {/* Custom Fields */}
+                  {customFields.length > 0 && (
+                    <div className="space-y-4">
+                      <Separator />
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Additional Information</h3>
+                        {customFields.map((field) => (
+                          <div key={field.id} className="space-y-2">
+                            <Label htmlFor={`custom-field-${field.id}`} className="flex items-center gap-2">
+                              {field.label}
+                              {field.required && (
+                                <Badge variant="destructive" className="text-xs">
+                                  Required
+                                </Badge>
+                              )}
+                            </Label>
+                            <Input
+                              id={`custom-field-${field.id}`}
+                              value={customFieldValues[field.id] || ""}
+                              onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
+                              placeholder={`Enter ${field.label}`}
+                              pattern={field.regex || undefined}
+                              required={field.required}
+                              className="bg-white dark:bg-slate-900"
+                            />
+                            {customFieldErrors[field.id] && (
+                              <p className="text-sm text-red-500 flex items-center gap-1">
+                                <AlertCircle className="h-3 w-3" />
+                                {customFieldErrors[field.id]}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-          {/* Attachments */}
-          <div className="space-y-3">
-            <Label className="text-lg font-medium">Attachments</Label>
-            <div className="space-y-2">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {/* File Upload */}
-                <Label
-                  htmlFor="attachments"
-                  className="flex flex-col items-center justify-center h-20 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted transition-colors"
-                >
-                  <div className="flex items-center justify-center space-x-2">
-                    <UploadCloud className="w-5 h-5 text-muted-foreground" />
-                    <div className="text-center">
-                      <p className="text-sm text-muted-foreground">
-                        <span className="font-semibold">Click to upload</span> or drag and drop
-                      </p>
+                  {/* Body */}
+                  <div className="space-y-3">
+                    <Separator />
+                    <Label className="text-base font-medium">Description</Label>
+                    <div className="border rounded-lg bg-white dark:bg-slate-900">
+                      <SimpleRichTextEditor
+                        value={typeof body === "string" ? body : ""}
+                        onChange={setBody}
+                        placeholder="Provide a detailed description of the issue or request..."
+                        className="min-h-[200px] w-full"
+                        editorContentClassName="p-5 rounded"
+                        autofocus
+                        editable
+                      />
                     </div>
                   </div>
-                  <Input id="attachments" type="file" className="hidden" multiple onChange={handleFileChange} />
-                </Label>
 
-                {/* URL Input */}
-                <Dialog open={urlDialogOpen} onOpenChange={setUrlDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="h-20 border-2 border-dashed hover:bg-muted transition-colors bg-transparent"
-                      type="button"
-                    >
-                      <div className="flex items-center justify-center space-x-2">
-                        <Link className="w-5 h-5 text-muted-foreground" />
-                        <div className="text-center">
-                          <p className="text-sm text-muted-foreground">
-                            <span className="font-semibold">Click here to insert URL</span>
-                          </p>
+                  {/* Attachments */}
+                  <div className="space-y-4">
+                    <Separator />
+                    <Label className="text-base font-medium flex items-center gap-2">
+                      <UploadCloud className="h-4 w-4" />
+                      Attachments
+                    </Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* File Upload */}
+                      <Label
+                        htmlFor="attachments"
+                        className="flex flex-col items-center justify-center h-24 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors bg-white dark:bg-slate-900"
+                      >
+                        <div className="flex items-center justify-center space-x-2">
+                          <UploadCloud className="w-5 h-5 text-slate-500" />
+                          <div className="text-center">
+                            <p className="text-sm text-slate-600 dark:text-slate-400">
+                              <span className="font-semibold">Click to upload</span> or drag and drop
+                            </p>
+                            <p className="text-xs text-slate-500">Files up to 10MB</p>
+                          </div>
+                        </div>
+                        <Input id="attachments" type="file" className="hidden" multiple onChange={handleFileChange} />
+                      </Label>
+
+                      {/* URL Input */}
+                      <Dialog open={urlDialogOpen} onOpenChange={setUrlDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="h-24 border-2 border-dashed border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors bg-white dark:bg-slate-900"
+                            type="button"
+                          >
+                            <div className="flex items-center justify-center space-x-2">
+                              <Link className="w-5 h-5 text-slate-500" />
+                              <div className="text-center">
+                                <p className="text-sm text-slate-600 dark:text-slate-400">
+                                  <span className="font-semibold">Add URL</span>
+                                </p>
+                                <p className="text-xs text-slate-500">Link to external resource</p>
+                              </div>
+                            </div>
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[425px]">
+                          <DialogHeader>
+                            <DialogTitle>Add URL Attachment</DialogTitle>
+                            <DialogDescription>
+                              Enter a name and URL for the attachment you want to add.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="grid gap-4 py-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="url-name">Name</Label>
+                              <Input
+                                id="url-name"
+                                value={urlName}
+                                onChange={(e) => setUrlName(e.target.value)}
+                                placeholder="Enter attachment name"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="url-value">URL</Label>
+                              <Input
+                                id="url-value"
+                                value={urlValue}
+                                onChange={(e) => setUrlValue(e.target.value)}
+                                placeholder="https://example.com/file.pdf"
+                                type="url"
+                              />
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                setUrlDialogOpen(false)
+                                setUrlName("")
+                                setUrlValue("")
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button type="button" onClick={handleAddUrl} disabled={!urlName.trim() || !urlValue.trim()}>
+                              Add Attachment
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+
+                    {attachments.length > 0 && (
+                      <div className="space-y-3">
+                        <h4 className="font-medium text-sm text-slate-600 dark:text-slate-400">Attached Files:</h4>
+                        <div className="space-y-2">
+                          {attachments.map((att) => (
+                            <div
+                              key={att.id}
+                              className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border"
+                            >
+                              <div className="flex items-center space-x-3 flex-1">
+                                <div className="flex items-center space-x-2">
+                                  {att.type === "file" ? (
+                                    <div className="p-1 bg-blue-100 dark:bg-blue-900 rounded">
+                                      <UploadCloud className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                    </div>
+                                  ) : (
+                                    <div className="p-1 bg-green-100 dark:bg-green-900 rounded">
+                                      <Link className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                    </div>
+                                  )}
+                                  <div>
+                                    <span className="text-sm font-medium">{att.name}</span>
+                                    {att.size && (
+                                      <span className="text-xs text-slate-500 block">
+                                        {(att.size / 1024).toFixed(2)} KB
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  {att.uploading && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
+                                  {att.error && (
+                                    <Badge variant="destructive" className="text-xs">
+                                      {att.error}
+                                    </Badge>
+                                  )}
+                                  {att.url && !att.uploading && !att.error && att.type === "file" && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      Uploaded
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeAttachment(att.id)}
+                                className="text-red-500 hover:text-red-700 h-8 w-8 p-0"
+                                disabled={att.uploading}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
                         </div>
                       </div>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end pt-6">
+                    <Button type="submit" disabled={isLoading} size="lg" className="px-8">
+                      {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Create Ticket
                     </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                      <DialogTitle>Add URL Attachment</DialogTitle>
-                      <DialogDescription>Enter a name and URL for the attachment you want to add.</DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="url-name">Name</Label>
-                        <Input
-                          id="url-name"
-                          value={urlName}
-                          onChange={(e) => setUrlName(e.target.value)}
-                          placeholder="Enter attachment name"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="url-value">URL</Label>
-                        <Input
-                          id="url-value"
-                          value={urlValue}
-                          onChange={(e) => setUrlValue(e.target.value)}
-                          placeholder="https://example.com/file.pdf"
-                          type="url"
-                        />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          setUrlDialogOpen(false)
-                          setUrlName("")
-                          setUrlValue("")
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button type="button" onClick={handleAddUrl} disabled={!urlName.trim() || !urlValue.trim()}>
-                        Add Attachment
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </div>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
 
-            {attachments.length > 0 && (
-              <div className="space-y-2">
-                <h4 className="font-medium">Attachments:</h4>
-                <div className="space-y-2">
-                  {attachments.map((att) => (
-                    <div key={att.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
-                      <div className="flex items-center space-x-2 flex-1">
-                        <div className="flex items-center space-x-1">
-                          {att.type === "file" ? (
-                            <UploadCloud className="h-4 w-4 text-blue-500" />
-                          ) : (
-                            <Link className="h-4 w-4 text-green-500" />
-                          )}
-                          <span className="text-sm font-medium">
-                            {att.name}
-                            {att.size && ` (${(att.size / 1024).toFixed(2)} KB)`}
+          {/* Properties Panel - Right Side */}
+          <div className="xl:col-span-1 space-y-6">
+            <Card className="shadow-lg border-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5" />
+                  Ticket Properties
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Category */}
+                <div className="space-y-3">
+                  <Label htmlFor="category" className="flex items-center gap-2 text-sm font-medium">
+                    <FileText className="h-4 w-4" />
+                    Category
+                  </Label>
+                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <SelectTrigger id="category" className="w-full h-11 bg-white dark:bg-slate-900">
+                      <SelectValue placeholder="Select category">
+                        {selectedCategory && <span className="truncate">{getSelectedCategoryDisplay()}</span>}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="w-[400px] max-h-[300px]">
+                      {flatCategories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id.toString()} className="cursor-pointer">
+                          <span className="block w-full">
+                            {"\u00A0".repeat(cat.level * 4)}
+                            {cat.name}
                           </span>
-                        </div>
-                        {att.uploading && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
-                        {att.error && <span className="text-xs text-red-500">({att.error})</span>}
-                        {att.url && !att.uploading && !att.error && att.type === "file" && (
-                          <span className="text-xs text-green-500">(✓ Uploaded)</span>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeAttachment(att.id)}
-                        className="text-red-500 hover:text-red-700 h-6 w-6 p-0"
-                        disabled={att.uploading}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
-            )}
-          </div>
 
-          <div className="flex justify-end pt-4">
-            <Button type="submit" disabled={isLoading} size="lg">
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create Ticket
-            </Button>
-          </div>
-        </form>
-      </div>
-
-      {/* Properties Panel - Right Side */}
-      <div className="xl:col-span-2 space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Ticket Properties</CardTitle>
-            <CardDescription>Configure ticket settings and assignment</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Category */}
-            <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger id="category" className="w-full">
-                  <SelectValue placeholder="Select category">
-                    {selectedCategory && <span className="truncate">{getSelectedCategoryDisplay()}</span>}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="w-[450px] max-h-[300px]">
-                  {flatCategories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id.toString()} className="cursor-pointer">
-                      <span className="block w-full">
-                        {"\u00A0".repeat(cat.level * 4)}
-                        {cat.name}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Assign To */}
-            <div className="space-y-2">
-              <Label htmlFor="assignTo">Assign To</Label>
-              <Select value={selectedEntity} onValueChange={setSelectedEntity}>
-                <SelectTrigger id="assignTo" className="w-full">
-                  <SelectValue placeholder="Select team or user">
-                    {selectedEntity && <span className="truncate">{getSelectedEntityDisplay()}</span>}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="w-[400px] max-h-[200px]">
-                  {flatEntities.map((entity) => (
-                    <SelectItem key={entity.entityId} value={entity.entityId} className="cursor-pointer">
-                      <span className="block w-full">
-                        {"\u00A0".repeat(entity.level * 4)}
-                        {entity.name} ({entity.type})
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Status */}
-            <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
-              <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                <SelectTrigger id="status" className="w-full">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent className="w-[350px]">
-                  {statuses.map((stat) => (
-                    <SelectItem key={stat.id} value={stat.id.toString()}>
-                      <span className="flex items-center">
-                        <span
-                          className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
-                          style={{ backgroundColor: stat.color }}
+                <div className="space-y-3">
+                  <Label className="flex items-center gap-2 text-sm font-medium">
+                    <Users className="h-4 w-4" />
+                    Assign To
+                  </Label>
+                  <Popover open={assignOpen} onOpenChange={setAssignOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={assignOpen}
+                        className="w-full justify-between h-11 bg-white dark:bg-slate-900"
+                      >
+                        {selectedEntity ? (
+                          <div className="flex items-center gap-2 truncate">
+                            <Avatar className="h-6 w-6">
+                              <AvatarFallback className="text-xs">
+                                {getEntityInitials(flatEntities.find((e) => e.entityId === selectedEntity)?.name || "")}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="truncate">{getSelectedEntityDisplay()}</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">Select team or user...</span>
+                        )}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Search teams and users..."
+                          value={assignSearch}
+                          onValueChange={setAssignSearch}
                         />
-                        <span className="truncate">{stat.name}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                        <CommandList>
+                          <CommandEmpty>No teams or users found.</CommandEmpty>
+                          <CommandGroup>
+                            {filteredEntities.map((entity, idx) => (
+                              <CommandItem
+                                key={entity.entityId}
+                                value={entity.entityId}
+                                onSelect={(currentValue) => {
+                                  setSelectedEntity(currentValue === selectedEntity ? "" : currentValue)
+                                  setAssignOpen(false)
+                                  setAssignSearch("")
+                                }}
+                                className={cn(
+                                  "cursor-pointer",
+                                  entity.type === "team"
+                                    ? "bg-slate-50 dark:bg-slate-900 font-medium"
+                                    : "pl-2 border-l-2 border-slate-200 dark:border-slate-700",
+                                  entity.type === "team" && idx > 0
+                                    ? "mt-1 pt-1 border-t border-slate-200 dark:border-slate-700"
+                                    : "",
+                                )}
+                              >
+                                <div className="flex items-center gap-3 w-full">
+                                  <Avatar className="h-8 w-8">
+                                    <AvatarFallback className="text-xs">
+                                      {getEntityInitials(entity.name)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium truncate">
+                                        {"\u00A0".repeat(entity.level * 2)}
+                                        {entity.name}
+                                      </span>
+                                      <Badge
+                                        variant={entity.type === "team" ? "default" : "secondary"}
+                                        className="text-xs"
+                                      >
+                                        {entity.type === "team" ? (
+                                          <>
+                                            <Users className="h-3 w-3 mr-1" />
+                                            Team
+                                          </>
+                                        ) : (
+                                          <>
+                                            <User className="h-3 w-3 mr-1" />
+                                            User
+                                          </>
+                                        )}
+                                      </Badge>
+                                    </div>
+                                    {entity.level > 0 && (
+                                      <p className="text-xs text-muted-foreground truncate">{entity.fullPath}</p>
+                                    )}
+                                  </div>
+                                  <Check
+                                    className={cn(
+                                      "ml-auto h-4 w-4",
+                                      selectedEntity === entity.entityId ? "opacity-100" : "opacity-0",
+                                    )}
+                                  />
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
 
-            {/* Priority */}
-            <div className="space-y-2">
-              <Label htmlFor="priority">Priority</Label>
-              <Select value={selectedPriority} onValueChange={setSelectedPriority}>
-                <SelectTrigger id="priority" className="w-full">
-                  <SelectValue placeholder="Select priority" />
-                </SelectTrigger>
-                <SelectContent className="w-[300px]">
-                  {priorities.map((prio) => (
-                    <SelectItem key={prio.id} value={prio.id.toString()}>
-                      <span className="flex items-center">
-                        <span
-                          className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
-                          style={{ backgroundColor: prio.color }}
-                        />
-                        <span className="truncate">{prio.name}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
+                <Separator />
+
+                {/* Status */}
+                <div className="space-y-3">
+                  <Label htmlFor="status" className="flex items-center gap-2 text-sm font-medium">
+                    <Calendar className="h-4 w-4" />
+                    Status
+                  </Label>
+                  <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                    <SelectTrigger id="status" className="w-full h-11 bg-white dark:bg-slate-900">
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent className="w-[350px]">
+                      {statuses.map((stat) => (
+                        <SelectItem key={stat.id} value={stat.id.toString()}>
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: stat.color }}
+                            />
+                            <span className="truncate">{stat.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Priority */}
+                <div className="space-y-3">
+                  <Label htmlFor="priority" className="flex items-center gap-2 text-sm font-medium">
+                    <Flag className="h-4 w-4" />
+                    Priority
+                  </Label>
+                  <Select value={selectedPriority} onValueChange={setSelectedPriority}>
+                    <SelectTrigger id="priority" className="w-full h-11 bg-white dark:bg-slate-900">
+                      <SelectValue placeholder="Select priority" />
+                    </SelectTrigger>
+                    <SelectContent className="w-[300px]">
+                      {priorities.map((prio) => (
+                        <SelectItem key={prio.id} value={prio.id.toString()}>
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: prio.color }}
+                            />
+                            <span className="truncate">{prio.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   )
