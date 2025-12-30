@@ -66,7 +66,7 @@
     "lowlight": "^3.3.0",
     "lucide-react": "^0.522.0",
     "mime-types": "^3.0.1",
-    "next": "15.3.4",
+    "next": "15.3.8",
     "next-auth": "^4.24.11",
     "next-themes": "^0.4.6",
     "nodemailer": "^7.0.3",
