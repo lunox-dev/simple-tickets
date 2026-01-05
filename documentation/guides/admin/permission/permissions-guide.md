@@ -142,6 +142,14 @@ ticket:action:thread:create:any
 - `ticket:action:thread:create:assigned` - Can create threads on tickets assigned to them
 - `ticket:action:thread:create:team:unclaimed` - Can create threads on unclaimed team tickets
 
+#### Access Visibility
+```
+ticket:action:view_access
+```
+
+**Examples:**
+- `ticket:action:view_access` - Can view the list of users who have access to the ticket
+
 ## User & Team Management Permissions
 
 ### User Management
