@@ -10,23 +10,37 @@ import { handlePermissionError } from '@/lib/permission-error'
 // Helper to format a Team/UserTeam entity into a display object
 function formatEntity(e: {
   id: number
-  team: { name: string } | null
+  teamId?: number | null
+  userTeamId?: number | null
+  team: { id: number, name: string } | null
   userTeam: {
+    id: number
+    teamId: number
     user: { displayName: string }
     team: { name: string }
   } | null
 } | null) {
   if (!e) return null;
+
   if (e.team) {
-    return { entityId: e.id, name: e.team.name }
+    return {
+      entityId: e.id,
+      name: e.team.name,
+      type: 'team',
+      teamId: e.team.id,
+      userTeamId: null
+    }
   }
   if (e.userTeam) {
     return {
       entityId: e.id,
-      name: `${e.userTeam.user.displayName} (${e.userTeam.team.name})`
+      name: `${e.userTeam.user.displayName} (${e.userTeam.team.name})`,
+      type: 'user',
+      teamId: e.userTeam.teamId,
+      userTeamId: e.userTeam.id
     }
   }
-  return { entityId: e.id, name: 'Unknown' }
+  return { entityId: e.id, name: 'Unknown', type: 'unknown', teamId: null, userTeamId: null }
 }
 
 export async function GET(req: NextRequest) {
@@ -52,6 +66,13 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     return handlePermissionError(err)
   }
+  // access.accessVia contains the rules that matched.
+  // We also want all the user's teams to check "team" scope for other actions.
+  const userTeams = await prisma.userTeam.findMany({
+    where: { userId, Active: true },
+    select: { id: true, teamId: true }
+  })
+
   const { accessVia, actionPermissions } = access
 
   // 2) fetch main ticket info
@@ -66,9 +87,13 @@ export async function GET(req: NextRequest) {
       currentAssignedTo: {
         select: {
           id: true,
-          team: { select: { name: true } },
+          teamId: true,
+          userTeamId: true,
+          team: { select: { id: true, name: true } },
           userTeam: {
             select: {
+              id: true,
+              teamId: true,
               user: { select: { displayName: true } },
               team: { select: { name: true } }
             }
@@ -78,9 +103,13 @@ export async function GET(req: NextRequest) {
       createdBy: {
         select: {
           id: true,
-          team: { select: { name: true } },
+          teamId: true,
+          userTeamId: true,
+          team: { select: { id: true, name: true } },
           userTeam: {
             select: {
+              id: true,
+              teamId: true,
               user: { select: { displayName: true } },
               team: { select: { name: true } }
             }
@@ -123,9 +152,13 @@ export async function GET(req: NextRequest) {
         createdBy: {
           select: {
             id: true,
-            team: { select: { name: true } },
+            teamId: true,
+            userTeamId: true,
+            team: { select: { id: true, name: true } },
             userTeam: {
               select: {
+                id: true,
+                teamId: true,
                 user: { select: { displayName: true } },
                 team: { select: { name: true } }
               }
@@ -146,9 +179,13 @@ export async function GET(req: NextRequest) {
         assignedFrom: {
           select: {
             id: true,
-            team: { select: { name: true } },
+            teamId: true,
+            userTeamId: true,
+            team: { select: { id: true, name: true } },
             userTeam: {
               select: {
+                id: true,
+                teamId: true,
                 user: { select: { displayName: true } },
                 team: { select: { name: true } }
               }
@@ -158,9 +195,13 @@ export async function GET(req: NextRequest) {
         assignedTo: {
           select: {
             id: true,
-            team: { select: { name: true } },
+            teamId: true,
+            userTeamId: true,
+            team: { select: { id: true, name: true } },
             userTeam: {
               select: {
+                id: true,
+                teamId: true,
                 user: { select: { displayName: true } },
                 team: { select: { name: true } }
               }
@@ -170,9 +211,13 @@ export async function GET(req: NextRequest) {
         assignedBy: {
           select: {
             id: true,
-            team: { select: { name: true } },
+            teamId: true,
+            userTeamId: true,
+            team: { select: { id: true, name: true } },
             userTeam: {
               select: {
+                id: true,
+                teamId: true,
                 user: { select: { displayName: true } },
                 team: { select: { name: true } }
               }
@@ -192,9 +237,13 @@ export async function GET(req: NextRequest) {
         changedBy: {
           select: {
             id: true,
-            team: { select: { name: true } },
+            teamId: true,
+            userTeamId: true,
+            team: { select: { id: true, name: true } },
             userTeam: {
               select: {
+                id: true,
+                teamId: true,
                 user: { select: { displayName: true } },
                 team: { select: { name: true } }
               }
@@ -214,9 +263,13 @@ export async function GET(req: NextRequest) {
         changedBy: {
           select: {
             id: true,
-            team: { select: { name: true } },
+            teamId: true,
+            userTeamId: true,
+            team: { select: { id: true, name: true } },
             userTeam: {
               select: {
+                id: true,
+                teamId: true,
                 user: { select: { displayName: true } },
                 team: { select: { name: true } }
               }
@@ -236,9 +289,13 @@ export async function GET(req: NextRequest) {
         changedBy: {
           select: {
             id: true,
-            team: { select: { name: true } },
+            teamId: true,
+            userTeamId: true,
+            team: { select: { id: true, name: true } },
             userTeam: {
               select: {
+                id: true,
+                teamId: true,
                 user: { select: { displayName: true } },
                 team: { select: { name: true } }
               }
@@ -354,8 +411,8 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // 10) return flat permissions on user object
-  const userPermissions = [
+  // 10) return permissions and user info
+  const allPermissions = [
     ...accessVia.map(v => v.permission),
     ...actionPermissions
   ]
@@ -363,7 +420,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     user: {
       id: userId,
-      permissions: Array.from(new Set(userPermissions))
+      permissions: Array.from(new Set(allPermissions)),
+      teams: userTeams
     },
     ticket: {
       id: ticket.id,

@@ -28,14 +28,22 @@ import {
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 
+interface TicketEntity {
+  entityId: number
+  name: string
+  type: 'team' | 'user' | 'unknown'
+  teamId: number | null
+  userTeamId: number | null
+}
+
 interface TicketData {
   id: number
   title: string
   currentStatus: { id: number; name: string; color: string }
   currentPriority: { id: number; name: string; color: string }
   currentCategory: { id: number; name: string; fullPath?: string }
-  currentAssignedTo: { entityId: number; name: string } | null
-  createdBy: { entityId: number; name: string }
+  currentAssignedTo: TicketEntity | null
+  createdBy: TicketEntity
   createdAt: string
   updatedAt: string
 }
@@ -83,12 +91,16 @@ interface FlatEntity {
 
 interface SidebarProps {
   ticket: TicketData
-  userPermissions: string[]
+  user: {
+    id: number
+    permissions: string[]
+    teams: { id: number; teamId: number }[]
+  }
   onTicketUpdate: () => void
   onClose?: () => void
 }
 
-export default function TicketSidebar({ ticket, userPermissions, onTicketUpdate, onClose }: SidebarProps) {
+export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }: SidebarProps) {
   const [priorities, setPriorities] = useState<Priority[]>([])
   const [statuses, setStatuses] = useState<Status[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -130,6 +142,7 @@ export default function TicketSidebar({ ticket, userPermissions, onTicketUpdate,
         name: category.name,
         fullPath: currentPath.join(" > "),
         level,
+
       })
 
       if (category.children && category.children.length > 0) {
@@ -200,10 +213,54 @@ export default function TicketSidebar({ ticket, userPermissions, onTicketUpdate,
     fetchReferenceData()
   }, [])
 
+  // Helper to validate scope/context against the ticket and user
+  const checkScope = (context: string, scope: string) => {
+    if (scope === "any") return true
+
+    if (context === "assigned") {
+      const assigned = ticket.currentAssignedTo
+      if (!assigned) return false
+
+      if (scope === "team") {
+        if (!assigned.teamId) return false
+        return user.teams.some(t => t.teamId === assigned.teamId)
+      }
+
+      if (scope === "team:unclaimed") {
+        if (!assigned.teamId) return false
+        if (assigned.userTeamId) return false // It IS claimed
+        return user.teams.some(t => t.teamId === assigned.teamId)
+      }
+
+      if (scope === "self") {
+        if (!assigned.userTeamId) return false
+        return user.teams.some(t => t.id === assigned.userTeamId)
+      }
+    }
+
+    if (context === "createdby") {
+      const creator = ticket.createdBy
+      if (!creator) return false
+
+      // 'team' scope for createdby means created by someone in my team
+      if (scope === "team") {
+        if (!creator.teamId) return false
+        return user.teams.some(t => t.teamId === creator.teamId)
+      }
+
+      if (scope === "self") {
+        if (!creator.userTeamId) return false
+        return user.teams.some(t => t.id === creator.userTeamId)
+      }
+    }
+
+    return false
+  }
+
   const canChangeStatus = (toStatusId?: number): boolean => {
     const currentStatusId = ticket.currentStatus.id
 
-    return userPermissions.some((permission) => {
+    return user.permissions.some((permission) => {
       if (!permission.startsWith("ticket:action:change:status:")) return false
 
       const parts = permission.split(":")
@@ -211,19 +268,20 @@ export default function TicketSidebar({ ticket, userPermissions, onTicketUpdate,
 
       const fromStatus = parts[5]
       const toStatus = parts[7]
-      const scope = parts[9]
+      const context = parts[8] // assigned / createdby
+      const scope = parts[9]   // self / team / any
 
       if (fromStatus !== "any" && Number.parseInt(fromStatus) !== currentStatusId) return false
       if (toStatusId && toStatus !== "any" && Number.parseInt(toStatus) !== toStatusId) return false
 
-      return scope === "any" || scope === "team" || scope === "self"
+      return checkScope(context, scope)
     })
   }
 
   const canChangePriority = (toPriorityId?: number): boolean => {
     const currentPriorityId = ticket.currentPriority.id
 
-    return userPermissions.some((permission) => {
+    return user.permissions.some((permission) => {
       if (!permission.startsWith("ticket:action:change:priority:")) return false
 
       const parts = permission.split(":")
@@ -231,19 +289,20 @@ export default function TicketSidebar({ ticket, userPermissions, onTicketUpdate,
 
       const fromPriority = parts[5]
       const toPriority = parts[7]
+      const context = parts[8]
       const scope = parts[9]
 
       if (fromPriority !== "any" && Number.parseInt(fromPriority) !== currentPriorityId) return false
       if (toPriorityId && toPriority !== "any" && Number.parseInt(toPriority) !== toPriorityId) return false
 
-      return scope === "any" || scope === "team" || scope === "self"
+      return checkScope(context, scope)
     })
   }
 
   const canChangeCategory = (toCategoryId?: number): boolean => {
     const currentCategoryId = ticket.currentCategory.id
 
-    return userPermissions.some((permission) => {
+    return user.permissions.some((permission) => {
       if (!permission.startsWith("ticket:action:change:category:")) return false
 
       const parts = permission.split(":")
@@ -251,34 +310,53 @@ export default function TicketSidebar({ ticket, userPermissions, onTicketUpdate,
 
       const fromCategory = parts[5]
       const toCategory = parts[7]
+      const context = parts[8]
       const scope = parts[9]
 
       if (fromCategory !== "any" && Number.parseInt(fromCategory) !== currentCategoryId) return false
       if (toCategoryId && toCategory !== "any" && Number.parseInt(toCategory) !== toCategoryId) return false
 
-      return scope === "any" || scope === "team" || scope === "self"
+      return checkScope(context, scope)
     })
   }
 
   const canChangeAssignment = (): boolean => {
-    return userPermissions.some((permission) => {
+    return user.permissions.some((permission) => {
       if (!permission.startsWith("ticket:action:change:assigned:")) return false
       const parts = permission.split(":")
       if (parts.length < 5) return false
-      const scope = parts[4]
-      return scope === "any" || scope === "team" || scope === "team:unclaimed" || scope === "self"
+
+      // format: ticket:action:change:assigned:from:any:to:any:assigned:any
+      // context is index 8, scope is index 9
+      if (parts.length >= 10) {
+        const fromEntity = parts[5]
+        // we don't strictly check 'fromEntity' here usually, but we could.
+        const context = parts[8]
+        const scope = parts[9]
+        return checkScope(context, scope)
+      } else {
+        // legacy or short format fallback? usually it's full format.
+        // But logic in original code checked index 4 for scope... which was wrong for the full format!
+        // If it IS "ticket:action:change:assigned:any" (short format), scope is 4.
+        // But standards doc says: ticket:action:change:assigned:from:any:to:any:assigned:any
+        return false
+      }
     })
   }
 
   const canClaimTicket = (): boolean => {
     if (!ticket.currentAssignedTo) return false
 
-    return userPermissions.some((permission) => {
+    return user.permissions.some((permission) => {
       if (!permission.startsWith("ticket:action:claim:")) return false
       const parts = permission.split(":")
       if (parts.length < 4) return false
       const scope = parts[3]
-      return scope === "any" || scope === "team" || scope === "team:unclaimed" || scope === "self"
+
+      // ticket:action:claim:any or ticket:action:claim:team:unclaimed
+      // Context is implicitly "assigned" for claiming check
+
+      return checkScope("assigned", scope)
     })
   }
 
@@ -587,7 +665,7 @@ export default function TicketSidebar({ ticket, userPermissions, onTicketUpdate,
                           <AvatarFallback className="text-xs">
                             {getEntityInitials(
                               flatEntities.find((e) => e.entityId === ticket.currentAssignedTo?.entityId.toString())?.name ||
-                                "",
+                              "",
                             )}
                           </AvatarFallback>
                         </Avatar>

@@ -22,14 +22,22 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+interface TicketEntity {
+  entityId: number
+  name: string
+  type: 'team' | 'user' | 'unknown'
+  teamId: number | null
+  userTeamId: number | null
+}
+
 interface TicketData {
   id: number
   title: string
   currentStatus: { id: number; name: string; color: string }
   currentPriority: { id: number; name: string; color: string }
   currentCategory: { id: number; name: string; fullPath?: string }
-  currentAssignedTo: { entityId: number; name: string } | null
-  createdBy: { entityId: number; name: string }
+  currentAssignedTo: TicketEntity | null
+  createdBy: TicketEntity
   createdAt: string
   updatedAt: string
 }
@@ -46,6 +54,7 @@ interface TicketViewData {
   user: {
     id: number
     permissions: string[]
+    teams: { id: number; teamId: number }[]
   }
   ticket: TicketData
   lastReadEvent: { type: string; id: number } | null
@@ -138,12 +147,30 @@ export default function TicketView({ ticketId }: TicketViewProps) {
       const scope = parts[4] // self, team, team:unclaimed, any
 
       if (scope === "any") return true
-      if (scope === "team") return true
-      if (scope === "team:unclaimed") {
-        return data.ticket.currentAssignedTo && data.ticket.currentAssignedTo.entityId
+
+      if (scope === "team") {
+        const assignedTeamId = data.ticket.currentAssignedTo?.teamId
+        // Also check if assigned to a userTeam, which has a teamId
+        const userTeamTeamId = data.ticket.currentAssignedTo?.type === 'user' ? data.ticket.currentAssignedTo.teamId : null
+
+        const effectiveTeamId = assignedTeamId || userTeamTeamId
+        if (!effectiveTeamId) return false
+
+        return data.user.teams.some(t => t.teamId === effectiveTeamId)
       }
+
+      if (scope === "team:unclaimed") {
+        // Must be assigned to one of my teams AND not assigned to a specific user
+        const assignedTeamId = data.ticket.currentAssignedTo?.teamId
+        if (!assignedTeamId) return false
+        if (data.ticket.currentAssignedTo?.userTeamId) return false // It IS claimed
+
+        return data.user.teams.some(t => t.teamId === assignedTeamId)
+      }
+
       if (scope === "self") {
-        return data.ticket.currentAssignedTo && data.ticket.currentAssignedTo.entityId === data.user.id
+        if (!data.ticket.currentAssignedTo?.userTeamId) return false
+        return data.user.teams.some(t => t.id === data.ticket.currentAssignedTo!.userTeamId)
       }
 
       return false
@@ -389,7 +416,7 @@ export default function TicketView({ ticketId }: TicketViewProps) {
             <div className="lg:col-span-1">
               <TicketSidebar
                 ticket={ticket}
-                userPermissions={data.user.permissions}
+                user={data.user}
                 onTicketUpdate={handleTicketUpdate}
                 onClose={() => setSidebarOpen(false)}
               />
