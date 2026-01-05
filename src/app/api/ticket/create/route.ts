@@ -1,13 +1,15 @@
 // src/app/api/ticket/create/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession }        from 'next-auth/next'
+import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
-import { prisma }                  from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
+
 import { enqueueNotificationInit } from '@/lib/notification-queue'
+import { verifyPermission, handlePermissionError } from '@/lib/permission-error'
 
 type FieldPayload = {
   fieldDefinitionId: number
-  value:             string
+  value: string
 }
 
 type AttachmentPayload = {
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'userTeamEntityId is required for authenticated users' }, { status: 400 })
     }
 
-    const user       = session.user as any
+    const user = session.user as any
     const selectedUT = user.actionUserTeamId
     if (!selectedUT) {
       return NextResponse.json({ error: 'No active UserTeam selected' }, { status: 400 })
@@ -65,10 +67,14 @@ export async function POST(req: NextRequest) {
 
     // collect permissions
     actingUT.userTeamPermissions.forEach((p: string) => permSet.add(p))
-    actingUT.permissions         .forEach((p: string) => permSet.add(p))
+    actingUT.permissions.forEach((p: string) => permSet.add(p))
 
-    if (!permSet.has('ticket:create')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+
+    try {
+      verifyPermission(permSet, 'ticket:create', 'ticket')
+    } catch (err) {
+      return handlePermissionError(err)
     }
 
     // ensure the provided entity matches your current actingAs entity
@@ -96,15 +102,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     const ak = await prisma.apiKey.findUnique({
-      where:  { key },
+      where: { key },
       select: { permissions: true, entities: { select: { id: true } } }
     })
     if (!ak) {
       return NextResponse.json({ error: 'Invalid API key' }, { status: 401 })
     }
     ak.permissions.forEach(p => permSet.add(p))
-    if (!permSet.has('ticket:create')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    try {
+      verifyPermission(permSet, 'ticket:create', 'ticket')
+    } catch (err) {
+      return handlePermissionError(err)
     }
     actorEntityId = ak.entities[0]?.id ?? null
     if (!actorEntityId) {
@@ -135,7 +144,7 @@ export async function POST(req: NextRequest) {
   const fieldArr = Array.isArray(fields) ? fields : []
   if (fieldArr.some(f =>
     typeof f.fieldDefinitionId !== 'number' ||
-    typeof f.value              !== 'string'
+    typeof f.value !== 'string'
   )) {
     return NextResponse.json({ error: 'Each field must have numeric fieldDefinitionId & string value' }, { status: 400 })
   }
@@ -147,21 +156,21 @@ export async function POST(req: NextRequest) {
   }
 
   // ─── enforce required custom fields ──────────────────────────────────────────
-  const allCats   = await prisma.ticketCategory.findMany({ select: { id: true, parentId: true } })
+  const allCats = await prisma.ticketCategory.findMany({ select: { id: true, parentId: true } })
   const parentMap = Object.fromEntries(allCats.map(c => [c.id, c.parentId!]))
-  const catIds    = new Set<number>()
-  let cur         = category!
+  const catIds = new Set<number>()
+  let cur = category!
   while (cur != null) {
     catIds.add(cur)
     cur = parentMap[cur]
   }
   const defs = await prisma.ticketFieldDefinition.findMany({
-    where:  { applicableCategoryId: { in: Array.from(catIds) } },
+    where: { applicableCategoryId: { in: Array.from(catIds) } },
     select: { id: true, requiredAtCreation: true }
   })
-  const requiredDefs   = defs.filter(d => d.requiredAtCreation).map(d => d.id)
+  const requiredDefs = defs.filter(d => d.requiredAtCreation).map(d => d.id)
   const providedDefIds = new Set(fieldArr.map(f => f.fieldDefinitionId))
-  const missing        = requiredDefs.filter(id => !providedDefIds.has(id))
+  const missing = requiredDefs.filter(id => !providedDefIds.has(id))
   if (missing.length) {
     return NextResponse.json({
       error: `Missing required custom fields: ${missing.join(', ')}`
@@ -173,19 +182,19 @@ export async function POST(req: NextRequest) {
     const { ticket, thread, event } = await prisma.$transaction(async tx => {
       const ticket = await tx.ticket.create({
         data: {
-          title:               title!.trim(),
-          createdById:         actorEntityId!,
+          title: title!.trim(),
+          createdById: actorEntityId!,
           currentAssignedToId: assignto!,
-          currentPriorityId:   priority!,
-          currentStatusId:     status!,
-          currentCategoryId:   category!,
+          currentPriorityId: priority!,
+          currentStatusId: status!,
+          currentCategoryId: category!,
         }
       })
 
       const thread = await tx.ticketThread.create({
         data: {
-          ticketId:    ticket.id,
-          body:        body!.trim(),
+          ticketId: ticket.id,
+          body: body!.trim(),
           createdById: actorEntityId!
         }
       })
@@ -200,13 +209,13 @@ export async function POST(req: NextRequest) {
       if (attachments) {
         for (const at of attachments) {
           const parts = at.filePath.split('/').pop()?.split('.') || []
-          const ext   = parts.length > 1 ? parts.pop()! : undefined
+          const ext = parts.length > 1 ? parts.pop()! : undefined
           await tx.ticketThreadAttachment.create({
             data: {
               ticketThreadId: thread.id,
-              filePath:       at.filePath,
-              fileName:       parts.join('.'),
-              fileType:       at.fileType ?? ext,
+              filePath: at.filePath,
+              fileName: parts.join('.'),
+              fileType: at.fileType ?? ext,
               ...(typeof at.fileSize === 'number'
                 ? { fileSize: at.fileSize }
                 : {})
@@ -218,9 +227,9 @@ export async function POST(req: NextRequest) {
       for (const f of fieldArr) {
         await tx.ticketFieldValue.create({
           data: {
-            ticketId:                ticket.id,
+            ticketId: ticket.id,
             ticketFieldDefinitionId: f.fieldDefinitionId,
-            value:                   f.value
+            value: f.value
           }
         })
       }

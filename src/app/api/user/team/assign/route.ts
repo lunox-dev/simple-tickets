@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma } from '@/lib/prisma'
+import { PermissionError, handlePermissionError } from '@/lib/permission-error'
 
 export async function POST(req: NextRequest) {
   // 1. Authenticate
@@ -17,10 +18,11 @@ export async function POST(req: NextRequest) {
     userTeamPermissions: string[]
   }>;
   const canAssign = userPerms.includes('userteam:assign:own') ||
+    userPerms.includes('userteam:assign:any') ||
     userTeams.flatMap(t => t.userTeamPermissions).includes('userteam:assign:own');
 
   if (!canAssign) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    return handlePermissionError(new PermissionError('userteam:assign:own OR userteam:assign:any', 'user_team'))
   }
 
   // 3. Parse and validate payload

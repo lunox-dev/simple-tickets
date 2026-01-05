@@ -3,8 +3,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma } from '@/lib/prisma'
 import { getTicketAccessForUser } from '@/lib/access-ticket-user'
-import { hasChangePermission } from '@/lib/access-ticket-change'
+import { verifyChangePermission } from '@/lib/access-ticket-change'
 import { enqueueNotificationInit } from '@/lib/notification-queue'
+import { handlePermissionError } from '@/lib/permission-error'
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -45,23 +46,25 @@ export async function POST(req: NextRequest) {
     ...ticket,
     currentAssignedTo: ticket.currentAssignedTo
       ? {
-          id: ticket.currentAssignedTo.id,
-          teamId: ticket.currentAssignedTo.teamId ?? undefined,
-          userTeamId: ticket.currentAssignedTo.userTeamId ?? undefined,
-        }
+        id: ticket.currentAssignedTo.id,
+        teamId: ticket.currentAssignedTo.teamId ?? undefined,
+        userTeamId: ticket.currentAssignedTo.userTeamId ?? undefined,
+      }
       : undefined,
     createdBy: ticket.createdBy
       ? {
-          id: ticket.createdBy.id,
-          teamId: ticket.createdBy.teamId ?? undefined,
-          userTeamId: ticket.createdBy.userTeamId ?? undefined,
-        }
+        id: ticket.createdBy.id,
+        teamId: ticket.createdBy.teamId ?? undefined,
+        userTeamId: ticket.createdBy.userTeamId ?? undefined,
+      }
       : undefined,
   }
 
-  const canChange = hasChangePermission(access, ticketForPermission, 'category', ticket.currentCategoryId, categoryId)
-  if (!canChange) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  try {
+    verifyChangePermission(access, ticketForPermission, 'category', ticket.currentCategoryId, categoryId)
+  } catch (err) {
+    return handlePermissionError(err)
   }
 
   try {
@@ -91,8 +94,8 @@ export async function POST(req: NextRequest) {
       }),
     ])
 
-    const event = await prisma.notificationEvent.findUnique({ where: { onCategoryChangeId: change.id }})
-    if(event) await enqueueNotificationInit(event.id)
+    const event = await prisma.notificationEvent.findUnique({ where: { onCategoryChangeId: change.id } })
+    if (event) await enqueueNotificationInit(event.id)
 
     return NextResponse.json(updatedTicket)
   } catch (error) {

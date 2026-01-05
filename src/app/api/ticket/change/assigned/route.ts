@@ -3,52 +3,10 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma } from '@/lib/prisma'
 import { enqueueNotificationInit } from '@/lib/notification-queue'
+import { verifyAssignmentChangePermission } from '@/lib/access-ticket-assignment'
+import { handlePermissionError } from '@/lib/permission-error'
 
-// Function to check if user has assignment change permission
-function hasAssignmentChangePermission(
-  userTeams: any[],
-  fromUserTeamId: number,
-  toUserTeamId: number
-): boolean {
-  for (const team of userTeams) {
-    const combinedPerms = [
-      ...team.userTeamPermissions.map((p: any) => ({ from: 'userTeam' as const, value: p })),
-      ...team.permissions.map((p: any) => ({ from: 'team' as const, value: p }))
-    ]
-    
-    for (const perm of combinedPerms) {
-      const parts = perm.value.split(':')
-      
-      // Check for ticket:action:change:assigned:any
-      if (parts[0] === 'ticket' && parts[1] === 'action' && parts[2] === 'change' && parts[3] === 'assigned') {
-        if (parts[4] === 'any') {
-          return true // Can assign to anyone
-        }
-        
-        // Check for specific assignment permissions like ticket:action:change:assigned:from:own:to:any:assigned:own
-        if (parts[4] === 'from' && parts[6] === 'to') {
-          const pFrom = parts[5]
-          const pTo = parts[7]
-          const pContext = parts[8]
-          const pScope = parts[9]
-          
-          // Check if from condition matches
-          if (pFrom === 'any' || (pFrom === 'own' && fromUserTeamId === team.userTeamId)) {
-            // Check if to condition matches
-            if (pTo === 'any' || (pTo === 'own' && toUserTeamId === team.userTeamId)) {
-              // Check context and scope
-              if (pContext === 'assigned' && (pScope === 'any' || pScope === 'own')) {
-                return true
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  
-  return false
-}
+
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -91,18 +49,12 @@ export async function POST(req: NextRequest) {
     userTeamPermissions: t.userTeamPermissions,
     permissions: t.permissions
   }))
-  
-  const canChange = hasAssignmentChangePermission(userTeams, fromUserTeamId, toUserTeamId)
-  
-  console.log('=== ASSIGNMENT CHANGE DEBUG ===')
-  console.log('FromUserTeamId:', fromUserTeamId)
-  console.log('ToUserTeamId:', toUserTeamId)
-  console.log('UserTeams:', JSON.stringify(userTeams, null, 2))
-  console.log('CanChange:', canChange)
-  console.log('=== END DEBUG ===')
-  
-  if (!canChange) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+
+  try {
+    verifyAssignmentChangePermission(userTeams, fromUserTeamId, toUserTeamId)
+  } catch (err) {
+    return handlePermissionError(err)
   }
 
   try {
@@ -132,8 +84,8 @@ export async function POST(req: NextRequest) {
       }),
     ])
 
-    const event = await prisma.notificationEvent.findUnique({ where: { onAssignmentChangeId: change.id }})
-    if(event) await enqueueNotificationInit(event.id)
+    const event = await prisma.notificationEvent.findUnique({ where: { onAssignmentChangeId: change.id } })
+    if (event) await enqueueNotificationInit(event.id)
 
     return NextResponse.json(updatedTicket)
   } catch (error) {

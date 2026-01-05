@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma } from '@/lib/prisma'
+import { PermissionError, handlePermissionError } from '@/lib/permission-error'
 
 export async function GET(req: NextRequest) {
   // 1. Authenticate
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
   const canViewAny = allPerms.includes('ticketcategory:view:any')
   const canViewOwn = allPerms.includes('ticketcategory:view:own')
   if (!canViewAny && !canViewOwn) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    return handlePermissionError(new PermissionError('ticketcategory:view:any OR ticketcategory:view:own', 'ticket_category'))
   }
 
   // 3. Fetch all categories (we'll filter down if needed)
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
     const childrenMap: Record<number, number[]> = {}
     allCats.forEach(c => {
       const pid = c.parentId ?? 0
-      ;(childrenMap[pid] ||= []).push(c.id)
+        ; (childrenMap[pid] ||= []).push(c.id)
     })
 
     // c) DFS to include all descendants

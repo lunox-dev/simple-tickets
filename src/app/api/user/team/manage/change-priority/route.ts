@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma } from '@/lib/prisma'
+import { verifyPermission, handlePermissionError } from '@/lib/permission-error'
 
 export async function POST(req: NextRequest) {
   // 1. Authenticate
@@ -17,8 +18,10 @@ export async function POST(req: NextRequest) {
     where: { id: userId },
     select: { permissions: true }
   })
-  if (!me?.permissions.includes('team:modify:changepriority')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  try {
+    verifyPermission(me?.permissions || [], 'team:modify:changepriority', 'team')
+  } catch (err) {
+    return handlePermissionError(err)
   }
 
   // 3. Parse & validate payload

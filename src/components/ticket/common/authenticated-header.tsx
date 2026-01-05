@@ -40,7 +40,7 @@ interface SessionUser {
   permissions: string[]
   teams: Team[]
   actionUserTeamId: number
-  actingAs: ActingAs
+  actingAs: ActingAs | null
 }
 
 interface AuthenticatedHeaderProps {
@@ -125,7 +125,7 @@ export default function AuthenticatedHeader({ session }: AuthenticatedHeaderProp
                 <span>Acting as:</span>
               </div>
               <Select
-                value={user.actionUserTeamId.toString()}
+                value={user.actionUserTeamId?.toString()}
                 onValueChange={handleTeamChange}
                 disabled={isChangingTeam}
               >
@@ -133,7 +133,7 @@ export default function AuthenticatedHeader({ session }: AuthenticatedHeaderProp
                   <SelectValue>
                     <div className="flex items-center space-x-2">
                       <Badge variant="secondary" className="font-medium">
-                        {user.actingAs.teamName}
+                        {user.actingAs?.teamName || "Select Team"}
                       </Badge>
                       {!isChangingTeam && <ChevronDown className="h-3 w-3 opacity-50" />}
                       {isChangingTeam && <Loader2 className="h-3 w-3 animate-spin" />}
@@ -157,7 +157,9 @@ export default function AuthenticatedHeader({ session }: AuthenticatedHeaderProp
               </Select>
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">{user.actingAs.teamName}</div>
+            <div className="text-sm text-muted-foreground">
+              {user.actingAs?.teamName || (user.teams[0]?.name ?? "No Team")}
+            </div>
           )}
         </div>
 
@@ -167,7 +169,7 @@ export default function AuthenticatedHeader({ session }: AuthenticatedHeaderProp
           <div className="md:hidden">
             {hasMultipleTeams ? (
               <Select
-                value={user.actionUserTeamId.toString()}
+                value={user.actionUserTeamId?.toString()}
                 onValueChange={handleTeamChange}
                 disabled={isChangingTeam}
               >
@@ -227,7 +229,7 @@ export default function AuthenticatedHeader({ session }: AuthenticatedHeaderProp
                         <Users className="h-3 w-3" />
                         <span>Current team:</span>
                         <Badge variant="secondary" className="text-xs">
-                          {user.actingAs.teamName}
+                          {user.actingAs?.teamName || "Select Team"}
                         </Badge>
                       </div>
                     </div>

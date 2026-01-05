@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma } from '@/lib/prisma'
+import { verifyPermission, handlePermissionError } from '@/lib/permission-error'
 
 export async function POST(req: NextRequest) {
   // 1. Authenticate (session or x-api-key)
@@ -25,8 +26,11 @@ export async function POST(req: NextRequest) {
   }
 
   // 2. Permission check
-  if (!permSet.has('ticket:properties:manage')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // 2. Permission check
+  try {
+    verifyPermission(permSet, 'ticket:properties:manage', 'ticket:properties')
+  } catch (err) {
+    return handlePermissionError(err)
   }
 
   // 3. Parse & validate payload

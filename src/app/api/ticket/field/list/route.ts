@@ -1,8 +1,9 @@
 // src/app/api/ticket/field/list/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession }      from 'next-auth/next'
+import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
-import { prisma }                from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
+import { PermissionError, handlePermissionError } from '@/lib/permission-error'
 
 export async function GET(req: NextRequest) {
   // 1. Authenticate
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
   const canViewAny = allPerms.includes('ticketcategory:view:any')
   const canViewOwn = allPerms.includes('ticketcategory:view:own')
   if (!canViewAny && !canViewOwn) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    return handlePermissionError(new PermissionError('ticketcategory:view:any OR ticketcategory:view:own', 'ticket_category'))
   }
 
   // 3. Parse and validate categoryId query param
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
     const childrenMap: Record<number, number[]> = {}
     allCats.forEach(c => {
       const pid = c.parentId ?? 0
-      ;(childrenMap[pid] ||= []).push(c.id)
+        ; (childrenMap[pid] ||= []).push(c.id)
     })
     // c) find direct roots user has via availabilityTeams
     const teamIds = userTeams.map(t => t.teamId).filter(id => id !== undefined && id !== null)
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest) {
     }
     // e) if requested categoryId not in allowed set → forbidden
     if (!allowed.has(categoryId)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return handlePermissionError(new PermissionError('ticketcategory:view:own', 'ticket_category', { categoryId, allowed: Array.from(allowed) }))
     }
   }
 
@@ -90,7 +91,7 @@ export async function GET(req: NextRequest) {
     select: { id: true, label: true, regex: true, requiredAtCreation: true },
     orderBy: [
       { priority: 'asc' },
-      { label:    'asc' }
+      { label: 'asc' }
     ]
   })
 

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
-import { getTicketAccessForUser } from '@/lib/access-ticket-user'
+
+import { verifyTicketAccess } from '@/lib/access-ticket-user'
 import { getTicketAccessUsers } from '@/lib/access-users'
+import { PermissionError, handlePermissionError } from '@/lib/permission-error'
 
 export async function GET(req: NextRequest) {
     const session = await getServerSession(authOptions)
@@ -21,20 +23,20 @@ export async function GET(req: NextRequest) {
     }
 
     // 1) Verify the user can see the ticket AND has the specific action permission
-    const access = await getTicketAccessForUser(userId, ticketId)
-    if (!access) {
-        // If they can't even see the ticket, return 404 or 403.
-        // Standard practice: if they don't know it exists, 404. If they know but can't access, 403.
-        // For simplicity, we'll return 403 here as "access denied".
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    // 1) Verify the user can see the ticket AND has the specific action permission
+    let access
+    try {
+        access = await verifyTicketAccess(userId, ticketId)
 
-    // Check for the specific permission node required to view the access list
-    // The 'actionPermissions' array from getTicketAccessForUser contains all ticket:action:* permissions
-    const hasViewAccessPermission = access.actionPermissions.includes('ticket:action:view_access')
+        // Check for the specific permission node required to view the access list
+        // The 'actionPermissions' array from getTicketAccessForUser contains all ticket:action:* permissions
+        const hasViewAccessPermission = access.actionPermissions.includes('ticket:action:view_access')
 
-    if (!hasViewAccessPermission) {
-        return NextResponse.json({ error: 'Forbidden: Missing ticket:action:view_access permission' }, { status: 403 })
+        if (!hasViewAccessPermission) {
+            throw new PermissionError('ticket:action:view_access', 'ticket:access', { ticketId })
+        }
+    } catch (err) {
+        return handlePermissionError(err)
     }
 
     // 2) Fetch the list of users who can see the ticket

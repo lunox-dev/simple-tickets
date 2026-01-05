@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma } from '@/lib/prisma'
+import { verifyPermission, handlePermissionError } from '@/lib/permission-error'
 
 export async function GET(req: NextRequest) {
   // 1. Authenticate (session or x-api-key)
@@ -25,8 +26,11 @@ export async function GET(req: NextRequest) {
   }
 
   // 2. Permission check
-  if (!permSet.has('user:account:list')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // 2. Permission check
+  try {
+    verifyPermission(permSet, 'user:account:list', 'user_account')
+  } catch (err) {
+    return handlePermissionError(err)
   }
 
   // 3. Fetch users with their teams

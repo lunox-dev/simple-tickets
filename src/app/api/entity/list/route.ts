@@ -1,8 +1,9 @@
 // src/app/api/entity/list/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession }      from 'next-auth/next'
+import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
-import { prisma }                from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
+import { PermissionError, handlePermissionError } from '@/lib/permission-error'
 
 export async function GET(req: NextRequest) {
   // 1) Authenticate (session or x-api-key)
@@ -46,32 +47,51 @@ export async function GET(req: NextRequest) {
 
   const canAny = permSet.has('entity:list:any')
   const canOwn = permSet.has('entity:list:own')
-  if (!canAny && !canOwn) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const canTeamAny = permSet.has('entity:list:team:any')
+
+  if (!canAny && !canOwn && !canTeamAny) {
+    return handlePermissionError(new PermissionError('entity:list:any OR entity:list:own OR entity:list:team:any', 'entity'))
   }
 
-  // 3) Build “own” filter if needed
+  // 3) Build filter
+  // If canAny, we want everything (no filter needed, unless we want to be explicit)
   let whereClause: any = {}
-  if (!canAny && userId !== null) {
-    const ownTeams = await prisma.userTeam.findMany({
-      where: { userId, Active: true },
-      select: { teamId: true }
-    })
-    const ownTeamIds = ownTeams.map(r => r.teamId)
-    const catIds = (await prisma.ticketCategoryAvailabilityTeam.findMany({
-      where: { teamId: { in: ownTeamIds } },
-      select: { ticketCategoryId: true }
-    })).map(r => r.ticketCategoryId)
-    const related = (await prisma.ticketCategoryAvailabilityTeam.findMany({
-      where: { ticketCategoryId: { in: catIds } },
-      select: { teamId: true }
-    })).map(r => r.teamId)
-    const allTeamIds = Array.from(new Set([...ownTeamIds, ...related]))
-    whereClause = {
-      OR: [
-        { teamId:    { in: allTeamIds } },
-        { userTeamId:{ in: allTeamIds } }
-      ]
+
+  if (!canAny) {
+    const orConditions: any[] = []
+
+    // If canTeamAny, allow ALL teams
+    if (canTeamAny) {
+      orConditions.push({ teamId: { not: null } })
+    }
+
+    // If canOwn, allow related teams & users
+    if (canOwn && userId !== null) {
+      const ownTeams = await prisma.userTeam.findMany({
+        where: { userId, Active: true },
+        select: { teamId: true }
+      })
+      const ownTeamIds = ownTeams.map(r => r.teamId)
+      const catIds = (await prisma.ticketCategoryAvailabilityTeam.findMany({
+        where: { teamId: { in: ownTeamIds } },
+        select: { ticketCategoryId: true }
+      })).map(r => r.ticketCategoryId)
+      const related = (await prisma.ticketCategoryAvailabilityTeam.findMany({
+        where: { ticketCategoryId: { in: catIds } },
+        select: { teamId: true }
+      })).map(r => r.teamId)
+      const allTeamIds = Array.from(new Set([...ownTeamIds, ...related]))
+
+      orConditions.push({ teamId: { in: allTeamIds } })
+      orConditions.push({ userTeam: { teamId: { in: allTeamIds } } })
+    }
+
+    if (orConditions.length > 0) {
+      whereClause = { OR: orConditions }
+    } else {
+      // Should technically be caught by the permission check above, but as a fallback:
+      // explicitly match nothing if we got here with no valid OR conditions
+      whereClause = { id: -1 }
     }
   }
 
@@ -79,11 +99,11 @@ export async function GET(req: NextRequest) {
   const entities = await prisma.entity.findMany({
     where: whereClause,
     select: {
-      id:         true,
-      teamId:     true,
+      id: true,
+      teamId: true,
       userTeamId: true,
-      team:       { select: { name: true, priority: true, id: true } },
-      userTeam:   { select: { teamId: true, user: { select: { displayName: true } } } }
+      team: { select: { name: true, priority: true, id: true } },
+      userTeam: { select: { teamId: true, user: { select: { displayName: true } } } }
     }
   })
 

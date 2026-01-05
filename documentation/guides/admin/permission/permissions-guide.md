@@ -164,13 +164,15 @@ ticket:action:view_access
 
 ### UserTeam Management
 - `userteam:assign:own` - Can assign themselves to teams
+- `userteam:assign:any` - Can assign any user to any team (Global assignment permission)
 - `userteam:manage:permission` - Can manage UserTeam permissions
 - `userteam:manage:priority` - Can manage UserTeam display priority
 
 ## Entity & API Key Permissions
 
 ### Entity Access
-- `entity:list:any` - Can list all entities
+- `entity:list:any` - Can list all entities (teams and users)
+- `entity:list:team:any` - Can list all teams (excludes users)
 - `entity:list:own` - Can only list entities they have access to
 
 ### Ticket Properties Management

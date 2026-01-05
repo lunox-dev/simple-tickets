@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma } from '@/lib/prisma'
+import { verifyPermission, handlePermissionError } from '@/lib/permission-error'
 
 export async function GET(req: NextRequest) {
   // 1. Authenticate
@@ -23,8 +24,11 @@ export async function GET(req: NextRequest) {
   ];
 
   // 3. Enforce ticketstatus:view:any
-  if (!allPerms.includes('ticketstatus:view:any')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // 3. Enforce ticketstatus:view:any
+  try {
+    verifyPermission(allPerms, 'ticketstatus:view:any', 'ticket_status')
+  } catch (err) {
+    return handlePermissionError(err)
   }
 
   // 4. Fetch statuses sorted by their priority (low→high)

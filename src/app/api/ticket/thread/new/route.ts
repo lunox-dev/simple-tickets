@@ -3,8 +3,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma } from '@/lib/prisma'
 import { getTicketAccessForUser } from '@/lib/access-ticket-user'
-import { hasThreadCreatePermission } from '@/lib/access-ticket-change'
+import { verifyThreadCreatePermission } from '@/lib/access-ticket-change'
 import { enqueueNotificationInit } from '@/lib/notification-queue'
+import { handlePermissionError } from '@/lib/permission-error'
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -38,9 +39,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
   }
 
-  const canCreateThread = hasThreadCreatePermission(access, ticket.currentAssignedTo?.id)
-  if (!canCreateThread) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  try {
+    verifyThreadCreatePermission(access, ticket.currentAssignedTo?.id)
+  } catch (err) {
+    return handlePermissionError(err)
   }
 
   try {

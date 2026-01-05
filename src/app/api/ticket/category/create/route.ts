@@ -1,8 +1,9 @@
 // src/app/api/ticket/category/create/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession }      from 'next-auth/next'
+import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
-import { prisma }                from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
+import { verifyPermission, handlePermissionError } from '@/lib/permission-error'
 
 export async function POST(req: NextRequest) {
   // 1. Authenticate
@@ -13,16 +14,18 @@ export async function POST(req: NextRequest) {
 
   // 2. Check user‐level permission
   const userPerms = (session.user as any).permissions as string[]
-  if (!userPerms.includes('ticketcategory:create')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  try {
+    verifyPermission(userPerms, 'ticketcategory:create', 'ticketcategory')
+  } catch (err) {
+    return handlePermissionError(err)
   }
 
   // 3. Parse & validate payload
-  const { 
-    name, 
-    childDropdownLabel, 
-    parentId, 
-    priority 
+  const {
+    name,
+    childDropdownLabel,
+    parentId,
+    priority
   } = await req.json() as {
     name?: string
     childDropdownLabel?: string | null

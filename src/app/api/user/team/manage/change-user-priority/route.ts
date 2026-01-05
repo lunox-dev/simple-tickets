@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma } from '@/lib/prisma'
+import { verifyPermission, handlePermissionError } from '@/lib/permission-error'
 
 export async function PATCH(req: NextRequest) {
   // 1. Authenticate
@@ -29,8 +30,10 @@ export async function PATCH(req: NextRequest) {
   if (!actingUT) {
     return NextResponse.json({ error: 'You do not belong to this UserTeam' }, { status: 403 })
   }
-  if (!actingUT.userTeamPermissions.includes('userteam:manage:priority')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  try {
+    verifyPermission(actingUT.userTeamPermissions, 'userteam:manage:priority', 'user_team', { userTeamId })
+  } catch (err) {
+    return handlePermissionError(err)
   }
 
   // 4. Update displayPriority

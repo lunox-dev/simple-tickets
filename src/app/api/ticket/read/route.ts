@@ -1,10 +1,11 @@
 // src/app/api/ticket/read/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession }        from 'next-auth/next'
+import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
-import { prisma }                  from '@/lib/prisma'
-import { getTicketAccessForUser }  from '@/lib/access-ticket-user'
+import { prisma } from '@/lib/prisma'
+import { verifyTicketAccess } from '@/lib/access-ticket-user'
+import { handlePermissionError } from '@/lib/permission-error'
 
 // Helper to format a Team/UserTeam entity into a display object
 function formatEntity(e: {
@@ -45,9 +46,11 @@ export async function GET(req: NextRequest) {
   }
 
   // 1) check access and gather permissions
-  const access = await getTicketAccessForUser(userId, ticketId)
-  if (!access) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  let access
+  try {
+    access = await verifyTicketAccess(userId, ticketId)
+  } catch (err) {
+    return handlePermissionError(err)
   }
   const { accessVia, actionPermissions } = access
 
@@ -57,13 +60,13 @@ export async function GET(req: NextRequest) {
     select: {
       id: true,
       title: true,
-      currentStatus:   { select: { id: true, name: true, color: true } },
+      currentStatus: { select: { id: true, name: true, color: true } },
       currentPriority: { select: { id: true, name: true, color: true } },
       currentCategory: { select: { id: true, name: true, parentId: true } },
       currentAssignedTo: {
         select: {
           id: true,
-          team:     { select: { name: true } },
+          team: { select: { name: true } },
           userTeam: {
             select: {
               user: { select: { displayName: true } },
@@ -75,7 +78,7 @@ export async function GET(req: NextRequest) {
       createdBy: {
         select: {
           id: true,
-          team:     { select: { name: true } },
+          team: { select: { name: true } },
           userTeam: {
             select: {
               user: { select: { displayName: true } },
@@ -120,7 +123,7 @@ export async function GET(req: NextRequest) {
         createdBy: {
           select: {
             id: true,
-            team:     { select: { name: true } },
+            team: { select: { name: true } },
             userTeam: {
               select: {
                 user: { select: { displayName: true } },
@@ -143,7 +146,7 @@ export async function GET(req: NextRequest) {
         assignedFrom: {
           select: {
             id: true,
-            team:     { select: { name: true } },
+            team: { select: { name: true } },
             userTeam: {
               select: {
                 user: { select: { displayName: true } },
@@ -155,7 +158,7 @@ export async function GET(req: NextRequest) {
         assignedTo: {
           select: {
             id: true,
-            team:     { select: { name: true } },
+            team: { select: { name: true } },
             userTeam: {
               select: {
                 user: { select: { displayName: true } },
@@ -167,7 +170,7 @@ export async function GET(req: NextRequest) {
         assignedBy: {
           select: {
             id: true,
-            team:     { select: { name: true } },
+            team: { select: { name: true } },
             userTeam: {
               select: {
                 user: { select: { displayName: true } },
@@ -185,11 +188,11 @@ export async function GET(req: NextRequest) {
         id: true,
         changedAt: true,
         priorityFrom: { select: { id: true, name: true } },
-        priorityTo:   { select: { id: true, name: true } },
+        priorityTo: { select: { id: true, name: true } },
         changedBy: {
           select: {
             id: true,
-            team:     { select: { name: true } },
+            team: { select: { name: true } },
             userTeam: {
               select: {
                 user: { select: { displayName: true } },
@@ -207,11 +210,11 @@ export async function GET(req: NextRequest) {
         id: true,
         changedAt: true,
         statusFrom: { select: { id: true, name: true } },
-        statusTo:   { select: { id: true, name: true } },
+        statusTo: { select: { id: true, name: true } },
         changedBy: {
           select: {
             id: true,
-            team:     { select: { name: true } },
+            team: { select: { name: true } },
             userTeam: {
               select: {
                 user: { select: { displayName: true } },
@@ -229,11 +232,11 @@ export async function GET(req: NextRequest) {
         id: true,
         changedAt: true,
         categoryFrom: { select: { id: true, name: true } },
-        categoryTo:   { select: { id: true, name: true } },
+        categoryTo: { select: { id: true, name: true } },
         changedBy: {
           select: {
             id: true,
-            team:     { select: { name: true } },
+            team: { select: { name: true } },
             userTeam: {
               select: {
                 user: { select: { displayName: true } },
@@ -269,24 +272,24 @@ export async function GET(req: NextRequest) {
 
   for (const t of threads) {
     activityLog.push({
-      type:        'THREAD',
-      id:          t.id,
-      at:          t.createdAt,
-      body:        t.body,
-      createdBy:   formatEntity(t.createdBy),
+      type: 'THREAD',
+      id: t.id,
+      at: t.createdAt,
+      body: t.body,
+      createdBy: formatEntity(t.createdBy),
       attachments: t.attachments,
-      read:        t.notificationEvent ? (readMap.get(t.notificationEvent.id) ?? false) : false
+      read: t.notificationEvent ? (readMap.get(t.notificationEvent.id) ?? false) : false
     })
   }
 
   for (const a of assigns) {
     activityLog.push({
       type: 'ASSIGN_CHANGE',
-      id:   a.id,
-      at:   a.assignedAt,
+      id: a.id,
+      at: a.assignedAt,
       from: a.assignedFrom ? formatEntity(a.assignedFrom) : null,
-      to:   a.assignedTo ? formatEntity(a.assignedTo) : null,
-      by:   a.assignedBy ? formatEntity(a.assignedBy) : null,
+      to: a.assignedTo ? formatEntity(a.assignedTo) : null,
+      by: a.assignedBy ? formatEntity(a.assignedBy) : null,
       read: a.notificationEvent ? (readMap.get(a.notificationEvent.id) ?? false) : false
     })
   }
@@ -294,11 +297,11 @@ export async function GET(req: NextRequest) {
   for (const p of prios) {
     activityLog.push({
       type: 'PRIORITY_CHANGE',
-      id:   p.id,
-      at:   p.changedAt,
+      id: p.id,
+      at: p.changedAt,
       from: p.priorityFrom,
-      to:   p.priorityTo,
-      by:   formatEntity(p.changedBy),
+      to: p.priorityTo,
+      by: formatEntity(p.changedBy),
       read: p.notificationEvent ? (readMap.get(p.notificationEvent.id) ?? false) : false
     })
   }
@@ -306,11 +309,11 @@ export async function GET(req: NextRequest) {
   for (const s of stats) {
     activityLog.push({
       type: 'STATUS_CHANGE',
-      id:   s.id,
-      at:   s.changedAt,
+      id: s.id,
+      at: s.changedAt,
       from: s.statusFrom,
-      to:   s.statusTo,
-      by:   formatEntity(s.changedBy),
+      to: s.statusTo,
+      by: formatEntity(s.changedBy),
       read: s.notificationEvent ? (readMap.get(s.notificationEvent.id) ?? false) : false
     })
   }
@@ -318,11 +321,11 @@ export async function GET(req: NextRequest) {
   for (const c of cats) {
     activityLog.push({
       type: 'CATEGORY_CHANGE',
-      id:   c.id,
-      at:   c.changedAt,
+      id: c.id,
+      at: c.changedAt,
       from: c.categoryFrom,
-      to:   c.categoryTo,
-      by:   formatEntity(c.changedBy),
+      to: c.categoryTo,
+      by: formatEntity(c.changedBy),
       read: c.notificationEvent ? (readMap.get(c.notificationEvent.id) ?? false) : false
     })
   }
@@ -345,7 +348,7 @@ export async function GET(req: NextRequest) {
         eventId: { in: eventIds }
       },
       data: {
-        read:   true,
+        read: true,
         readAt: new Date()
       }
     })
@@ -359,19 +362,19 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     user: {
-      id:          userId,
+      id: userId,
       permissions: Array.from(new Set(userPermissions))
     },
     ticket: {
-      id:                ticket.id,
-      title:             ticket.title,
-      currentStatus:     ticket.currentStatus ? { ...ticket.currentStatus, color: ticket.currentStatus.color } : null,
-      currentPriority:   ticket.currentPriority ? { ...ticket.currentPriority, color: ticket.currentPriority.color } : null,
-      currentCategory:   ticket.currentCategory ? { ...ticket.currentCategory, name: buildCategoryChain(ticket.currentCategory.id) } : null,
+      id: ticket.id,
+      title: ticket.title,
+      currentStatus: ticket.currentStatus ? { ...ticket.currentStatus, color: ticket.currentStatus.color } : null,
+      currentPriority: ticket.currentPriority ? { ...ticket.currentPriority, color: ticket.currentPriority.color } : null,
+      currentCategory: ticket.currentCategory ? { ...ticket.currentCategory, name: buildCategoryChain(ticket.currentCategory.id) } : null,
       currentAssignedTo: ticket.currentAssignedTo ? formatEntity(ticket.currentAssignedTo) : null,
-      createdBy:         formatEntity(ticket.createdBy),
-      createdAt:         ticket.createdAt,
-      updatedAt:         ticket.updatedAt
+      createdBy: formatEntity(ticket.createdBy),
+      createdAt: ticket.createdAt,
+      updatedAt: ticket.updatedAt
     },
     lastReadEvent: lastRead ? { type: lastRead.type, id: lastRead.id } : null,
     activityLog
