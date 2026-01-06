@@ -32,7 +32,7 @@ export default async function TicketLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background text-foreground">
       <AuthenticatedHeader session={session} />
       <main>{children}</main>
     </div>

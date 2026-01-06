@@ -62,41 +62,57 @@ export function FilterPanel({
   }
 
   return (
-    <aside className="w-80 border-r border-gray-200 h-screen sticky top-0 flex flex-col">
-      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-800">Filters</h2>
-        <Button variant="link" className="p-0 h-auto text-sm" onClick={clearFilters}>
-          Clear All
-        </Button>
+    <aside className="w-72 border-r bg-card h-screen sticky top-0 flex flex-col shadow-sm">
+      <div className="px-5 py-6 border-b flex items-center justify-between bg-muted/20">
+        <h2 className="text-base font-semibold text-foreground">Filters</h2>
+        {(filters.statuses.length > 0 ||
+          filters.priorities.length > 0 ||
+          filters.categories.length > 0 ||
+          filters.assignedEntities.length > 0 ||
+          filters.createdByEntities.length > 0 ||
+          filters.fromDate ||
+          filters.search) && (
+            <Button
+              variant="ghost"
+              className="p-0 h-auto text-xs text-primary hover:text-primary/80 font-medium"
+              onClick={clearFilters}
+            >
+              Clear All
+            </Button>
+          )}
       </div>
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <div className="flex-1 overflow-y-auto px-5 py-6 space-y-8 scrollbar-thin">
         {/* Search */}
-        <div className="space-y-2">
-          <Label>Search</Label>
+        <div className="space-y-3">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Search</Label>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search..."
               value={filters.search}
               onChange={(e) => handleFilterChange({ search: e.target.value })}
-              className="pl-10"
+              className="pl-9 h-9 text-sm bg-background border-border focus:bg-card transition-colors"
             />
           </div>
         </div>
 
         {/* Status Filter */}
-        <div className="space-y-2">
-          <Label>Status</Label>
-          <div className="space-y-2 max-h-40 overflow-y-auto">
+        <div className="space-y-3">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</Label>
+          <div className="space-y-2.5">
             {statuses.map((status) => (
-              <div key={status.id} className="flex items-center space-x-2">
+              <div key={status.id} className="flex items-center space-x-2.5">
                 <Checkbox
                   id={`status-${status.id}`}
                   checked={filters.statuses.includes(status.id)}
                   onCheckedChange={() => handleMultiSelectChange("statuses", status.id)}
+                  className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                 />
-                <label htmlFor={`status-${status.id}`} className="flex items-center space-x-2 text-sm cursor-pointer">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: status.color }} />
+                <label
+                  htmlFor={`status-${status.id}`}
+                  className="flex items-center space-x-2 text-sm text-muted-foreground cursor-pointer hover:text-foreground select-none w-full"
+                >
+                  <div className="w-2.5 h-2.5 rounded-full ring-1 ring-inset ring-border" style={{ backgroundColor: status.color }} />
                   <span>{status.name}</span>
                 </label>
               </div>
@@ -105,21 +121,22 @@ export function FilterPanel({
         </div>
 
         {/* Priority Filter */}
-        <div className="space-y-2">
-          <Label>Priority</Label>
-          <div className="space-y-2 max-h-40 overflow-y-auto">
+        <div className="space-y-3">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Priority</Label>
+          <div className="space-y-2.5">
             {priorities.map((priority) => (
-              <div key={priority.id} className="flex items-center space-x-2">
+              <div key={priority.id} className="flex items-center space-x-2.5">
                 <Checkbox
                   id={`priority-${priority.id}`}
                   checked={filters.priorities.includes(priority.id)}
                   onCheckedChange={() => handleMultiSelectChange("priorities", priority.id)}
+                  className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                 />
                 <label
                   htmlFor={`priority-${priority.id}`}
-                  className="flex items-center space-x-2 text-sm cursor-pointer"
+                  className="flex items-center space-x-2 text-sm text-muted-foreground cursor-pointer hover:text-foreground select-none w-full"
                 >
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: priority.color }} />
+                  <div className="w-2.5 h-2.5 rounded-full ring-1 ring-inset ring-border" style={{ backgroundColor: priority.color }} />
                   <span>{priority.name}</span>
                 </label>
               </div>
@@ -128,22 +145,28 @@ export function FilterPanel({
         </div>
 
         {/* Category Filter */}
-        <div className="space-y-2">
-          <Label>Category</Label>
-          <div className="space-y-2 max-h-40 overflow-y-auto">
+        <div className="space-y-3">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Category</Label>
+          <div className="space-y-2.5 max-h-48 overflow-y-auto pr-2 scrollbar-thumb-muted scrollbar-track-transparent scrollbar-thin">
             {flatCategories.map((category) => (
-              <div key={category.id} className="flex items-center space-x-2">
+              <div
+                key={category.id}
+                className="flex items-center space-x-2.5"
+                style={{ marginLeft: `${category.level * 1.25}rem` }}
+              >
+                {category.level > 0 && (
+                  <div className="w-px h-3 bg-border mr-1 self-center" />
+                )}
                 <Checkbox
                   id={`category-${category.id}`}
                   checked={filters.categories.includes(category.id)}
                   onCheckedChange={() => handleMultiSelectChange("categories", category.id)}
+                  className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                 />
                 <label
                   htmlFor={`category-${category.id}`}
-                  className="text-sm cursor-pointer"
-                  style={{ paddingLeft: `${category.level * 16}px` }}
+                  className="text-sm text-muted-foreground cursor-pointer hover:text-foreground select-none w-full truncate"
                 >
-                  {category.level > 0 && "└─ "}
                   {category.name}
                 </label>
               </div>
@@ -152,47 +175,27 @@ export function FilterPanel({
         </div>
 
         {/* Assigned To Filter */}
-        <div className="space-y-2">
-          <Label>Assigned To</Label>
-          <div className="space-y-2 max-h-40 overflow-y-auto">
+        <div className="space-y-3">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assigned To</Label>
+          <div className="space-y-2.5 max-h-48 overflow-y-auto pr-2 scrollbar-thumb-muted scrollbar-track-transparent scrollbar-thin">
             {flatEntities.map((entity) => (
-              <div key={entity.entityId} className="flex items-center space-x-2">
+              <div
+                key={entity.entityId}
+                className="flex items-center space-x-2.5"
+                style={{ marginLeft: `${entity.level * 1.25}rem` }}
+              >
                 <Checkbox
                   id={`assigned-${entity.entityId}`}
                   checked={filters.assignedEntities.includes(Number(entity.entityId))}
                   onCheckedChange={() => handleMultiSelectChange("assignedEntities", Number(entity.entityId))}
+                  className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                 />
                 <label
                   htmlFor={`assigned-${entity.entityId}`}
-                  className="text-sm cursor-pointer"
-                  style={{ paddingLeft: `${entity.level * 16}px` }}
+                  className="text-sm text-muted-foreground cursor-pointer hover:text-foreground select-none w-full truncate"
                 >
-                  {entity.level > 0 && "└─ "}
-                  {entity.name} ({entity.type})
-                </label>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Created By Filter */}
-        <div className="space-y-2">
-          <Label>Created By</Label>
-          <div className="space-y-2 max-h-40 overflow-y-auto">
-            {flatEntities.map((entity) => (
-              <div key={entity.entityId} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`created-by-${entity.entityId}`}
-                  checked={filters.createdByEntities.includes(Number(entity.entityId))}
-                  onCheckedChange={() => handleMultiSelectChange("createdByEntities", Number(entity.entityId))}
-                />
-                <label
-                  htmlFor={`created-by-${entity.entityId}`}
-                  className="text-sm cursor-pointer"
-                  style={{ paddingLeft: `${entity.level * 16}px` }}
-                >
-                  {entity.level > 0 && "└─ "}
-                  {entity.name} ({entity.type})
+                  {entity.name}
+                  <span className="text-xs text-muted-foreground/70 ml-1 font-normal">({entity.type})</span>
                 </label>
               </div>
             ))}
@@ -200,20 +203,20 @@ export function FilterPanel({
         </div>
 
         {/* Date Range Filter */}
-        <div className="space-y-2">
-          <Label>Date Range</Label>
+        <div className="space-y-3">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date Range</Label>
           <div className="grid grid-cols-2 gap-2">
             <Popover>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
-                  className={cn("justify-start text-left font-normal", !filters.fromDate && "text-gray-500")}
+                  className={cn("justify-start text-left font-normal bg-background border-border h-9 px-3 text-xs", !filters.fromDate && "text-muted-foreground")}
                 >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {filters.fromDate ? format(filters.fromDate, "MMM d") : "From"}
+                  <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                  {filters.fromDate ? format(filters.fromDate, "MMM d") : "Start"}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
+              <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
                   mode="single"
                   selected={filters.fromDate || undefined}
@@ -226,13 +229,13 @@ export function FilterPanel({
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
-                  className={cn("justify-start text-left font-normal", !filters.toDate && "text-gray-500")}
+                  className={cn("justify-start text-left font-normal bg-background border-border h-9 px-3 text-xs", !filters.toDate && "text-muted-foreground")}
                 >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {filters.toDate ? format(filters.toDate, "MMM d") : "To"}
+                  <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                  {filters.toDate ? format(filters.toDate, "MMM d") : "End"}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
+              <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
                   mode="single"
                   selected={filters.toDate || undefined}

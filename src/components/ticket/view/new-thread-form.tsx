@@ -101,21 +101,21 @@ export default function NewThreadForm({ ticketId, onThreadCreated, onCancel }: N
           value={body}
           onChange={setBody}
           placeholder="Type your reply..."
-          className="min-h-[120px] border border-gray-200 rounded-md"
+          className="min-h-[120px] border border-border rounded-md"
         />
       </div>
 
       {/* Attachments */}
       {attachments.length > 0 && (
         <div className="space-y-2">
-          <h4 className="text-sm font-medium text-gray-700">Attachments:</h4>
+          <h4 className="text-sm font-medium text-foreground">Attachments:</h4>
           <div className="space-y-2">
             {attachments.map((attachment) => (
-              <div key={attachment.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
+              <div key={attachment.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
                 <div className="flex items-center space-x-2">
-                  <Paperclip className="h-4 w-4 text-gray-400" />
-                  <span className="text-sm font-medium truncate">{attachment.file.name}</span>
-                  <span className="text-xs text-gray-500">({(attachment.file.size / 1024).toFixed(2)} KB)</span>
+                  <Paperclip className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium truncate text-foreground">{attachment.file.name}</span>
+                  <span className="text-xs text-muted-foreground">({(attachment.file.size / 1024).toFixed(2)} KB)</span>
                 </div>
                 <Button type="button" variant="ghost" size="sm" onClick={() => removeAttachment(attachment.id)}>
                   <X className="h-4 w-4" />

@@ -5,12 +5,11 @@ import type { Content } from "@tiptap/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
+import { Card, CardContent } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Separator } from "@/components/ui/separator"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
@@ -31,11 +30,10 @@ import {
   Check,
   ChevronsUpDown,
   Users,
-  User,
   FileText,
   Calendar,
   Flag,
-  Target,
+  ArrowLeft,
 } from "lucide-react"
 import { SimpleRichTextEditor } from "@/components/ui/SimpleRichTextEditor"
 import { useSession } from "next-auth/react"
@@ -145,14 +143,12 @@ export default function NewTicketForm() {
     let result: FlatCategory[] = []
     categories.forEach((category) => {
       const currentPath = [...parentPath, category.name]
-      // Add current category (both parent and leaf categories are selectable)
       result.push({
         id: category.id,
         name: category.name,
         fullPath: currentPath.join(" > "),
         level,
       })
-      // Recursively add children
       if (category.children && category.children.length > 0) {
         result = result.concat(flattenCategories(category.children, currentPath, level + 1))
       }
@@ -165,7 +161,6 @@ export default function NewTicketForm() {
     let result: FlatEntity[] = []
     entities.forEach((entity) => {
       const currentPath = [...parentPath, entity.name]
-      // Add current entity
       result.push({
         entityId: entity.entityId,
         name: entity.name,
@@ -173,7 +168,6 @@ export default function NewTicketForm() {
         fullPath: currentPath.join(" > "),
         level,
       })
-      // Recursively add children
       if (entity.children && entity.children.length > 0) {
         result = result.concat(flattenEntities(entity.children, currentPath, level + 1))
       }
@@ -181,7 +175,7 @@ export default function NewTicketForm() {
     return result
   }
 
-  // Get selected category display name
+  // Show full category path when selected (Parent > Child)
   const getSelectedCategoryDisplay = () => {
     if (!selectedCategory) return ""
     const category = flatCategories.find((cat) => cat.id.toString() === selectedCategory)
@@ -193,6 +187,15 @@ export default function NewTicketForm() {
     if (!selectedEntity) return ""
     const entity = flatEntities.find((ent) => ent.entityId === selectedEntity)
     return entity ? `${entity.fullPath} (${entity.type})` : ""
+  }
+
+  // Debounce utility function
+  function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
+    let timeout: NodeJS.Timeout
+    return ((...args: any[]) => {
+      clearTimeout(timeout)
+      timeout = setTimeout(() => func(...args), wait)
+    }) as T
   }
 
   // Debounced validation function
@@ -214,11 +217,10 @@ export default function NewTicketForm() {
               return newErrors
             })
           }
-        } catch (e) {
+        } catch {
           console.warn("Invalid regex in field definition:", fieldDef.regex)
         }
       } else {
-        // Clear error if field is empty or no regex
         setCustomFieldErrors((prev) => {
           const newErrors = { ...prev }
           delete newErrors[fieldId]
@@ -228,15 +230,6 @@ export default function NewTicketForm() {
     }, 500),
     [customFields],
   )
-
-  // Debounce utility function
-  function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
-    let timeout: NodeJS.Timeout
-    return ((...args: any[]) => {
-      clearTimeout(timeout)
-      timeout = setTimeout(() => func(...args), wait)
-    }) as T
-  }
 
   // Upload file to attachment endpoint
   const uploadFile = async (file: File): Promise<string> => {
@@ -325,7 +318,6 @@ export default function NewTicketForm() {
 
   const handleCustomFieldChange = (fieldId: number, value: string) => {
     setCustomFieldValues((prev) => ({ ...prev, [fieldId]: value }))
-    // Use debounced validation
     debouncedValidation(fieldId, value)
   }
 
@@ -343,13 +335,10 @@ export default function NewTicketForm() {
 
       setAttachments((prev) => [...prev, ...newFiles])
 
-      // Upload each file
       for (const attachment of newFiles) {
         try {
           const url = await uploadFile(attachment.file!)
-          setAttachments((prev) =>
-            prev.map((att) => (att.id === attachment.id ? { ...att, url, uploading: false } : att)),
-          )
+          setAttachments((prev) => prev.map((att) => (att.id === attachment.id ? { ...att, url, uploading: false } : att)))
         } catch (error) {
           setAttachments((prev) =>
             prev.map((att) =>
@@ -364,12 +353,9 @@ export default function NewTicketForm() {
   }
 
   const handleAddUrl = () => {
-    if (!urlName.trim() || !urlValue.trim()) {
-      return
-    }
+    if (!urlName.trim() || !urlValue.trim()) return
 
     try {
-      // Validate URL
       new URL(urlValue)
       const newAttachment: AttachmentFile = {
         id: Math.random().toString(36).substring(2, 15),
@@ -382,8 +368,7 @@ export default function NewTicketForm() {
       setUrlName("")
       setUrlValue("")
       setUrlDialogOpen(false)
-    } catch (error) {
-      // Invalid URL
+    } catch {
       setError("Please enter a valid URL")
     }
   }
@@ -427,21 +412,18 @@ export default function NewTicketForm() {
       return
     }
 
-    // Check if any files are still uploading
     const uploadingFiles = attachments.filter((att) => att.uploading)
     if (uploadingFiles.length > 0) {
       setError("Please wait for all files to finish uploading.")
       return
     }
 
-    // Check for upload errors
     const failedUploads = attachments.filter((att) => att.error)
     if (failedUploads.length > 0) {
       setError("Some files failed to upload. Please remove them and try again.")
       return
     }
 
-    // Validate required custom fields
     for (const field of customFields) {
       if (field.required && !customFieldValues[field.id]?.trim()) {
         setError(`Field "${field.label}" is required.`)
@@ -462,7 +444,6 @@ export default function NewTicketForm() {
         value,
       }))
 
-    // Build attachment payload
     const attachmentPayload = attachments
       .filter((att) => att.url && !att.error)
       .map((att) => ({
@@ -480,7 +461,7 @@ export default function NewTicketForm() {
       priority: Number.parseInt(selectedPriority, 10),
       fields: payloadFields,
       attachments: attachmentPayload,
-      userTeamEntityId: session?.user?.actingAs?.userTeamEntityId, // Add this line
+      userTeamEntityId: session?.user?.actingAs?.userTeamEntityId,
     }
 
     try {
@@ -498,7 +479,6 @@ export default function NewTicketForm() {
       const result = await response.json()
       setSuccessMessage(`Ticket created successfully! Ticket ID: ${result.ticket.id}`)
 
-      // Reset form
       setTitle("")
       setBody("")
       setSelectedCategory("")
@@ -534,468 +514,402 @@ export default function NewTicketForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      <div className="container mx-auto p-6 max-w-7xl">
-        <div className="mb-8">
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="sticky top-0 z-40 border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.back()}
+                className="inline-flex items-center justify-center h-9 w-9 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight">Create Ticket</h1>
+                <p className="text-sm text-muted-foreground mt-0.5">Fill in the details to create a new support ticket</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => router.back()} className="h-10">
+                Cancel
+              </Button>
+              <Button onClick={handleSubmit} disabled={isLoading} className="h-10 min-w-[140px]">
+                {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {isLoading ? "Creating..." : "Create Ticket"}
+              </Button>
+            </div>
+          </div>
         </div>
+      </header>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* Main Content - Left Side */}
-          <div className="xl:col-span-2 space-y-6">
-            {error && (
-              <Alert variant="destructive" className="border-red-200 bg-red-50 dark:bg-red-950/50">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Error</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Error & Success Alerts */}
+          {error && (
+            <Alert variant="destructive" className="border-destructive/50 bg-destructive/10">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-            {successMessage && (
-              <Alert className="border-green-200 bg-green-50 dark:bg-green-950/50 text-green-800 dark:text-green-200">
-                <Check className="h-4 w-4" />
-                <AlertTitle>Success</AlertTitle>
-                <AlertDescription>{successMessage}</AlertDescription>
-              </Alert>
-            )}
+          {successMessage && (
+            <Alert className="border-green-900/50 bg-green-900/20 text-green-300">
+              <Check className="h-4 w-4" />
+              <AlertTitle>Success</AlertTitle>
+              <AlertDescription>{successMessage}</AlertDescription>
+            </Alert>
+          )}
 
-            <Card className="shadow-lg border-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl">Ticket Details</CardTitle>
-                <CardDescription>Provide the essential information for your ticket</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* Title */}
-                  <div className="space-y-3">
-                    <Label htmlFor="title" className="text-base font-medium flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
-                      Title
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Form */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Title Card */}
+              <Card className="border-border/40 shadow-sm">
+                <CardContent className="pt-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="title" className="text-sm font-semibold">
+                      Ticket Title
                     </Label>
                     <Input
                       id="title"
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
-                      placeholder="Enter a clear, descriptive title for your ticket"
-                      className="text-base h-12 bg-white dark:bg-slate-900"
+                      placeholder="Brief description of the issue..."
+                      className="h-12 text-base placeholder:text-muted-foreground/50"
                       required
                     />
+                    <p className="text-xs text-muted-foreground">Provide a clear, concise title for your ticket</p>
                   </div>
+                </CardContent>
+              </Card>
 
-                  {/* Custom Fields */}
-                  {customFields.length > 0 && (
-                    <div className="space-y-4">
-                      <Separator />
-                      <div className="space-y-4">
-                        <h3 className="text-lg font-medium">Additional Information</h3>
-                        {customFields.map((field) => (
-                          <div key={field.id} className="space-y-2">
-                            <Label htmlFor={`custom-field-${field.id}`} className="flex items-center gap-2">
-                              {field.label}
-                              {field.required && (
-                                <Badge variant="destructive" className="text-xs">
-                                  Required
-                                </Badge>
-                              )}
-                            </Label>
-                            <Input
-                              id={`custom-field-${field.id}`}
-                              value={customFieldValues[field.id] || ""}
-                              onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
-                              placeholder={`Enter ${field.label}`}
-                              pattern={field.regex || undefined}
-                              required={field.required}
-                              className="bg-white dark:bg-slate-900"
-                            />
-                            {customFieldErrors[field.id] && (
-                              <p className="text-sm text-red-500 flex items-center gap-1">
-                                <AlertCircle className="h-3 w-3" />
-                                {customFieldErrors[field.id]}
-                              </p>
-                            )}
-                          </div>
-                        ))}
+              {/* Description + Attachments in ONE container */}
+              <Card className="border-border/40 shadow-sm">
+                <CardContent className="pt-6">
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">Description</Label>
+                      <div className="border border-border/40 rounded-lg overflow-hidden">
+                        <SimpleRichTextEditor content={body} onChange={setBody} />
                       </div>
+                      <p className="text-xs text-muted-foreground">Provide detailed information about the issue</p>
                     </div>
-                  )}
 
-                  {/* Body */}
-                  <div className="space-y-3">
-                    <Separator />
-                    <Label className="text-base font-medium">Description</Label>
-                    <div className="border rounded-lg bg-white dark:bg-slate-900">
-                      <SimpleRichTextEditor
-                        value={typeof body === "string" ? body : ""}
-                        onChange={setBody}
-                        placeholder="Provide a detailed description of the issue or request..."
-                        className="min-h-[200px] w-full"
-                        editorContentClassName="p-5 rounded"
-                        autofocus
-                        editable
-                      />
-                    </div>
-                  </div>
-
-                  {/* Attachments */}
-                  <div className="space-y-4">
-                    <Separator />
-                    <Label className="text-base font-medium flex items-center gap-2">
-                      <UploadCloud className="h-4 w-4" />
-                      Attachments
-                    </Label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* File Upload */}
-                      <Label
-                        htmlFor="attachments"
-                        className="flex flex-col items-center justify-center h-24 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors bg-white dark:bg-slate-900"
-                      >
-                        <div className="flex items-center justify-center space-x-2">
-                          <UploadCloud className="w-5 h-5 text-slate-500" />
-                          <div className="text-center">
-                            <p className="text-sm text-slate-600 dark:text-slate-400">
-                              <span className="font-semibold">Click to upload</span> or drag and drop
-                            </p>
-                            <p className="text-xs text-slate-500">Files up to 10MB</p>
-                          </div>
+                    <div className="pt-4 border-t border-border/40">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <Label className="text-sm font-semibold block">Attachments</Label>
+                          <p className="text-xs text-muted-foreground mt-1">Add files or links to help describe your issue</p>
                         </div>
-                        <Input id="attachments" type="file" className="hidden" multiple onChange={handleFileChange} />
-                      </Label>
 
-                      {/* URL Input */}
-                      <Dialog open={urlDialogOpen} onOpenChange={setUrlDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="h-24 border-2 border-dashed border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors bg-white dark:bg-slate-900"
-                            type="button"
-                          >
-                            <div className="flex items-center justify-center space-x-2">
-                              <Link className="w-5 h-5 text-slate-500" />
-                              <div className="text-center">
-                                <p className="text-sm text-slate-600 dark:text-slate-400">
-                                  <span className="font-semibold">Add URL</span>
-                                </p>
-                                <p className="text-xs text-slate-500">Link to external resource</p>
+                        <Dialog open={urlDialogOpen} onOpenChange={setUrlDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button type="button" variant="outline" size="sm" className="bg-transparent">
+                              <Link className="h-4 w-4 mr-2" />
+                              Add Link
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Add URL</DialogTitle>
+                              <DialogDescription>Add a web link to your ticket</DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="url-name">Link Name</Label>
+                                <Input
+                                  id="url-name"
+                                  placeholder="e.g., Related Issue"
+                                  value={urlName}
+                                  onChange={(e) => setUrlName(e.target.value)}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="url-value">URL</Label>
+                                <Input
+                                  id="url-value"
+                                  placeholder="https://example.com"
+                                  value={urlValue}
+                                  onChange={(e) => setUrlValue(e.target.value)}
+                                />
                               </div>
                             </div>
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[425px]">
-                          <DialogHeader>
-                            <DialogTitle>Add URL Attachment</DialogTitle>
-                            <DialogDescription>
-                              Enter a name and URL for the attachment you want to add.
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="grid gap-4 py-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="url-name">Name</Label>
-                              <Input
-                                id="url-name"
-                                value={urlName}
-                                onChange={(e) => setUrlName(e.target.value)}
-                                placeholder="Enter attachment name"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="url-value">URL</Label>
-                              <Input
-                                id="url-value"
-                                value={urlValue}
-                                onChange={(e) => setUrlValue(e.target.value)}
-                                placeholder="https://example.com/file.pdf"
-                                type="url"
-                              />
-                            </div>
-                          </div>
-                          <DialogFooter>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => {
-                                setUrlDialogOpen(false)
-                                setUrlName("")
-                                setUrlValue("")
-                              }}
-                            >
-                              Cancel
-                            </Button>
-                            <Button type="button" onClick={handleAddUrl} disabled={!urlName.trim() || !urlValue.trim()}>
-                              Add Attachment
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-
-                    {attachments.length > 0 && (
-                      <div className="space-y-3">
-                        <h4 className="font-medium text-sm text-slate-600 dark:text-slate-400">Attached Files:</h4>
-                        <div className="space-y-2">
-                          {attachments.map((att) => (
-                            <div
-                              key={att.id}
-                              className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border"
-                            >
-                              <div className="flex items-center space-x-3 flex-1">
-                                <div className="flex items-center space-x-2">
-                                  {att.type === "file" ? (
-                                    <div className="p-1 bg-blue-100 dark:bg-blue-900 rounded">
-                                      <UploadCloud className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                                    </div>
-                                  ) : (
-                                    <div className="p-1 bg-green-100 dark:bg-green-900 rounded">
-                                      <Link className="h-4 w-4 text-green-600 dark:text-green-400" />
-                                    </div>
-                                  )}
-                                  <div>
-                                    <span className="text-sm font-medium">{att.name}</span>
-                                    {att.size && (
-                                      <span className="text-xs text-slate-500 block">
-                                        {(att.size / 1024).toFixed(2)} KB
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  {att.uploading && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
-                                  {att.error && (
-                                    <Badge variant="destructive" className="text-xs">
-                                      {att.error}
-                                    </Badge>
-                                  )}
-                                  {att.url && !att.uploading && !att.error && att.type === "file" && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      Uploaded
-                                    </Badge>
-                                  )}
-                                </div>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeAttachment(att.id)}
-                                className="text-red-500 hover:text-red-700 h-8 w-8 p-0"
-                                disabled={att.uploading}
-                              >
-                                <X className="h-4 w-4" />
+                            <DialogFooter>
+                              <Button variant="outline" onClick={() => setUrlDialogOpen(false)}>
+                                Cancel
                               </Button>
+                              <Button onClick={handleAddUrl}>Add Link</Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+
+                      {/* File Upload */}
+                      <div className="mt-4">
+                        <input
+                          type="file"
+                          id="file-upload"
+                          multiple
+                          onChange={handleFileChange}
+                          className="hidden"
+                          accept="*/*"
+                        />
+                        <label
+                          htmlFor="file-upload"
+                          className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border/60 rounded-lg hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer group"
+                        >
+                          <UploadCloud className="h-8 w-8 text-muted-foreground group-hover:text-primary/70 mb-2 transition-colors" />
+                          <p className="text-sm font-medium text-foreground">Drop files here or click to select</p>
+                          <p className="text-xs text-muted-foreground mt-1">PNG, JPG, PDF and other formats supported</p>
+                        </label>
+                      </div>
+
+                      {/* Attachment List */}
+                      {attachments.length > 0 && (
+                        <div className="space-y-2 mt-4">
+                          {attachments.map((attachment) => (
+                            <div
+                              key={attachment.id}
+                              className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/40 group"
+                            >
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium truncate">{attachment.name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {attachment.type === "file" && attachment.size
+                                      ? `${(attachment.size / 1024).toFixed(1)} KB`
+                                      : "Link"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {attachment.uploading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                                {attachment.error && <span className="text-xs text-destructive font-medium">Error</span>}
+                                {!attachment.uploading && !attachment.error && <Check className="h-4 w-4 text-green-600" />}
+                                <button
+                                  type="button"
+                                  onClick={() => removeAttachment(attachment.id)}
+                                  className="p-1 hover:bg-muted rounded transition-colors opacity-0 group-hover:opacity-100"
+                                >
+                                  <X className="h-4 w-4 text-muted-foreground" />
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
+                </CardContent>
+              </Card>
 
-                  <div className="flex justify-end pt-6">
-                    <Button type="submit" disabled={isLoading} size="lg" className="px-8">
-                      {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Create Ticket
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Properties Panel - Right Side */}
-          <div className="xl:col-span-1 space-y-6">
-            <Card className="shadow-lg border-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2">
-                  <Target className="h-5 w-5" />
-                  Ticket Properties
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Category */}
-                <div className="space-y-3">
-                  <Label htmlFor="category" className="flex items-center gap-2 text-sm font-medium">
-                    <FileText className="h-4 w-4" />
-                    Category
-                  </Label>
-                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                    <SelectTrigger id="category" className="w-full h-11 bg-white dark:bg-slate-900">
-                      <SelectValue placeholder="Select category">
-                        {selectedCategory && <span className="truncate">{getSelectedCategoryDisplay()}</span>}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className="w-[400px] max-h-[300px]">
-                      {flatCategories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id.toString()} className="cursor-pointer">
-                          <span className="block w-full">
-                            {"\u00A0".repeat(cat.level * 4)}
-                            {cat.name}
-                          </span>
-                        </SelectItem>
+              {/* Custom Fields Card */}
+              {customFields.length > 0 && (
+                <Card className="border-border/40 shadow-sm">
+                  <CardContent className="pt-6">
+                    <h3 className="text-sm font-semibold mb-4">Additional Information</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {customFields.map((field) => (
+                        <div key={field.id} className="space-y-2">
+                          <Label htmlFor={`custom-field-${field.id}`} className="text-sm font-medium">
+                            {field.label}
+                            {field.required && <span className="text-destructive ml-1">*</span>}
+                          </Label>
+                          <Input
+                            id={`custom-field-${field.id}`}
+                            value={customFieldValues[field.id] || ""}
+                            onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
+                            placeholder={`Enter ${field.label.toLowerCase()}`}
+                            className={cn("h-11", customFieldErrors[field.id] && "border-destructive focus:ring-destructive")}
+                          />
+                          {customFieldErrors[field.id] && <p className="text-xs text-destructive">{customFieldErrors[field.id]}</p>}
+                        </div>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
 
-                <div className="space-y-3">
-                  <Label className="flex items-center gap-2 text-sm font-medium">
-                    <Users className="h-4 w-4" />
-                    Assign To
-                  </Label>
-                  <Popover open={assignOpen} onOpenChange={setAssignOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={assignOpen}
-                        className="w-full justify-between h-11 bg-white dark:bg-slate-900"
-                      >
-                        {selectedEntity ? (
-                          <div className="flex items-center gap-2 truncate">
-                            <Avatar className="h-6 w-6">
-                              <AvatarFallback className="text-xs">
-                                {getEntityInitials(flatEntities.find((e) => e.entityId === selectedEntity)?.name || "")}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="truncate">{getSelectedEntityDisplay()}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">Select team or user...</span>
-                        )}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0" align="start">
-                      <Command shouldFilter={false}>
-                        <CommandInput
-                          placeholder="Search teams and users..."
-                          value={assignSearch}
-                          onValueChange={setAssignSearch}
-                        />
-                        <CommandList>
-                          <CommandEmpty>No teams or users found.</CommandEmpty>
-                          <CommandGroup>
-                            {filteredEntities.map((entity, idx) => (
-                              <CommandItem
-                                key={entity.entityId}
-                                value={entity.entityId}
-                                onSelect={(currentValue) => {
-                                  setSelectedEntity(currentValue === selectedEntity ? "" : currentValue)
-                                  setAssignOpen(false)
-                                  setAssignSearch("")
-                                }}
-                                className={cn(
-                                  "cursor-pointer",
-                                  entity.type === "team"
-                                    ? "bg-slate-50 dark:bg-slate-900 font-medium"
-                                    : "pl-2 border-l-2 border-slate-200 dark:border-slate-700",
-                                  entity.type === "team" && idx > 0
-                                    ? "mt-1 pt-1 border-t border-slate-200 dark:border-slate-700"
-                                    : "",
+            {/* Sidebar */}
+            <div className="space-y-6">
+              {/* ONE container for Category, Status, Priority, Assign To */}
+              <Card className="border-border/40 shadow-sm overflow-hidden">
+                <div className="bg-muted/10 px-6 py-4 border-b border-border/40">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="text-sm font-semibold">Ticket Properties</h3>
+                  </div>
+                </div>
+                <CardContent className="pt-6">
+
+                  <div className="space-y-4">
+                    {/* Category */}
+                    <div className="space-y-2">
+                      <Label htmlFor="category" className="text-sm font-semibold">
+                        Category
+                      </Label>
+                      <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                        <SelectTrigger id="category" className="h-11">
+                          <span className={cn("truncate", !selectedCategory && "text-muted-foreground")}>
+                            {selectedCategory ? getSelectedCategoryDisplay() : "Select a category..."}
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {flatCategories.map((category) => (
+                            <SelectItem key={category.id} value={category.id.toString()}>
+                              <span className="flex items-center">
+                                {category.level > 0 && (
+                                  <span className="mr-2 text-muted-foreground/40">
+                                    {"\u00A0\u00A0".repeat(category.level)}↳
+                                  </span>
                                 )}
-                              >
-                                <div className="flex items-center gap-3 w-full">
-                                  <Avatar className="h-8 w-8">
-                                    <AvatarFallback className="text-xs">
-                                      {getEntityInitials(entity.name)}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-medium truncate">
-                                        {"\u00A0".repeat(entity.level * 2)}
-                                        {entity.name}
-                                      </span>
-                                      <Badge
-                                        variant={entity.type === "team" ? "default" : "secondary"}
-                                        className="text-xs"
-                                      >
-                                        {entity.type === "team" ? (
-                                          <>
-                                            <Users className="h-3 w-3 mr-1" />
-                                            Team
-                                          </>
-                                        ) : (
-                                          <>
-                                            <User className="h-3 w-3 mr-1" />
-                                            User
-                                          </>
-                                        )}
+                                {category.name}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Status */}
+                    <div className="space-y-2">
+                      <Label htmlFor="status" className="text-sm font-semibold flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        Status
+                      </Label>
+                      <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                        <SelectTrigger id="status" className="h-11">
+                          <span className={cn(!selectedStatus && "text-muted-foreground")}>
+                            {selectedStatus
+                              ? statuses.find((s) => s.id.toString() === selectedStatus)?.name ?? "Selected"
+                              : "Select status..."}
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {statuses.map((status) => (
+                            <SelectItem key={status.id} value={status.id.toString()}>
+                              <div className="flex items-center gap-2">
+                                <div className="h-2 w-2 rounded-full" style={{ backgroundColor: status.color }} />
+                                {status.name}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Priority */}
+                    <div className="space-y-2">
+                      <Label htmlFor="priority" className="text-sm font-semibold flex items-center gap-2">
+                        <Flag className="h-4 w-4" />
+                        Priority
+                      </Label>
+                      <Select value={selectedPriority} onValueChange={setSelectedPriority}>
+                        <SelectTrigger id="priority" className="h-11">
+                          <span className={cn(!selectedPriority && "text-muted-foreground")}>
+                            {selectedPriority
+                              ? priorities.find((p) => p.id.toString() === selectedPriority)?.name ?? "Selected"
+                              : "Select priority..."}
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {priorities.map((priority) => (
+                            <SelectItem key={priority.id} value={priority.id.toString()}>
+                              <div className="flex items-center gap-2">
+                                <div className="h-2 w-2 rounded-full" style={{ backgroundColor: priority.color }} />
+                                {priority.name}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Assign To */}
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        Assign To
+                      </Label>
+                      <Popover open={assignOpen} onOpenChange={setAssignOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={assignOpen}
+                            className="w-full h-11 justify-between bg-transparent"
+                          >
+                            <span className="truncate">{selectedEntity ? getSelectedEntityDisplay() : "Select assignee..."}</span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0" align="start">
+                          <Command>
+                            <CommandInput
+                              placeholder="Search teams or users..."
+                              value={assignSearch}
+                              onValueChange={setAssignSearch}
+                            />
+                            <CommandEmpty>No results found.</CommandEmpty>
+                            <CommandList>
+                              <CommandGroup>
+                                {filteredEntities.map((entity) => (
+                                  <CommandItem
+                                    key={entity.entityId}
+                                    value={entity.entityId}
+                                    onSelect={() => {
+                                      setSelectedEntity(entity.entityId)
+                                      setAssignOpen(false)
+                                      setAssignSearch("")
+                                    }}
+                                    className="cursor-pointer aria-selected:bg-muted/50"
+                                  >
+                                    <div
+                                      className="flex items-center gap-2 w-full"
+                                      style={{ paddingLeft: `${entity.level * 1}rem` }}
+                                    >
+                                      {entity.level > 0 && (
+                                        <span className="text-muted-foreground/40 mr-1">↳</span>
+                                      )}
+                                      <Avatar className="h-6 w-6">
+                                        <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                          {getEntityInitials(entity.name)}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium truncate text-foreground">{entity.name}</p>
+                                        <p className="text-[10px] text-muted-foreground truncate">{entity.type === 'team' ? 'Team' : entity.fullPath}</p>
+                                      </div>
+                                      <Badge variant="secondary" className="text-[10px] h-4 px-1 rounded-sm border-border text-muted-foreground font-normal ml-auto flex-shrink-0">
+                                        {entity.type === 'team' ? 'Team' : 'User'}
                                       </Badge>
                                     </div>
-                                    {entity.level > 0 && (
-                                      <p className="text-xs text-muted-foreground truncate">{entity.fullPath}</p>
-                                    )}
-                                  </div>
-                                  <Check
-                                    className={cn(
-                                      "ml-auto h-4 w-4",
-                                      selectedEntity === entity.entityId ? "opacity-100" : "opacity-0",
-                                    )}
-                                  />
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </div>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
 
-                <Separator />
-
-                {/* Status */}
-                <div className="space-y-3">
-                  <Label htmlFor="status" className="flex items-center gap-2 text-sm font-medium">
-                    <Calendar className="h-4 w-4" />
-                    Status
-                  </Label>
-                  <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                    <SelectTrigger id="status" className="w-full h-11 bg-white dark:bg-slate-900">
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent className="w-[350px]">
-                      {statuses.map((stat) => (
-                        <SelectItem key={stat.id} value={stat.id.toString()}>
-                          <div className="flex items-center gap-3">
-                            <div
-                              className="w-3 h-3 rounded-full flex-shrink-0"
-                              style={{ backgroundColor: stat.color }}
-                            />
-                            <span className="truncate">{stat.name}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Priority */}
-                <div className="space-y-3">
-                  <Label htmlFor="priority" className="flex items-center gap-2 text-sm font-medium">
-                    <Flag className="h-4 w-4" />
-                    Priority
-                  </Label>
-                  <Select value={selectedPriority} onValueChange={setSelectedPriority}>
-                    <SelectTrigger id="priority" className="w-full h-11 bg-white dark:bg-slate-900">
-                      <SelectValue placeholder="Select priority" />
-                    </SelectTrigger>
-                    <SelectContent className="w-[300px]">
-                      {priorities.map((prio) => (
-                        <SelectItem key={prio.id} value={prio.id.toString()}>
-                          <div className="flex items-center gap-3">
-                            <div
-                              className="w-3 h-3 rounded-full flex-shrink-0"
-                              style={{ backgroundColor: prio.color }}
-                            />
-                            <span className="truncate">{prio.name}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
+                      {selectedEntity && (
+                        <div className="p-2 rounded-lg bg-muted/50 text-xs text-muted-foreground">
+                          <p className="font-medium text-foreground">{getSelectedEntityDisplay()}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
-        </div>
-      </div>
+        </form>
+      </main>
     </div>
   )
 }

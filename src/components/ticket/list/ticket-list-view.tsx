@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Loader2, MoreHorizontal, Plus, RefreshCw, Eye, AlertCircle, MessageSquare, Clock, Edit } from "lucide-react"
 import { formatDistanceToNow, format } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -205,7 +206,7 @@ export function TicketListView() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen bg-white">
+      <div className="flex h-screen bg-background">
         <FilterPanel
           filters={filters}
           setFilters={setFilters}
@@ -217,18 +218,22 @@ export function TicketListView() {
         />
 
         <main className="flex-1 flex flex-col overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
+          <div className="px-8 py-6 border-b bg-card">
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <h1 className="text-xl font-bold text-gray-800">Tickets</h1>
-                {pagination && <Badge variant="secondary">{pagination.totalItems} total</Badge>}
+              <div className="flex items-center space-x-4">
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">Tickets</h1>
+                {pagination && (
+                  <Badge variant="outline" className="px-3 py-1 font-normal text-sm bg-muted/30 border-border">
+                    {pagination.totalItems} Total
+                  </Badge>
+                )}
               </div>
-              <div className="flex items-center space-x-2">
-                <Button variant="outline" size="sm" onClick={fetchTickets} disabled={isLoading}>
+              <div className="flex items-center space-x-3">
+                <Button variant="outline" size="sm" onClick={fetchTickets} disabled={isLoading} className="border-border hover:bg-muted">
                   <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
                   Refresh
                 </Button>
-                <Button size="sm" onClick={() => router.push("/ticket/new")}>
+                <Button size="sm" onClick={() => router.push("/ticket/new")} className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
                   <Plus className="h-4 w-4 mr-2" />
                   New Ticket
                 </Button>
@@ -236,158 +241,195 @@ export function TicketListView() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
-            {isLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-              </div>
-            ) : error ? (
-              <div className="p-6">
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              </div>
-            ) : tickets.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center p-6">
-                <MessageSquare className="h-16 w-16 text-gray-300 mb-4" />
-                <h3 className="text-lg font-medium text-gray-800">No Tickets Found</h3>
-                <p className="text-gray-500 mt-1">There are no tickets matching your current filters.</p>
-              </div>
-            ) : (
-              <ul className="divide-y divide-gray-200">
-                {tickets.map((ticket) => (
-                  <li
-                    key={ticket.id}
-                    className="p-4 sm:p-6 hover:bg-gray-50 cursor-pointer transition-colors duration-150"
-                    onClick={() => handleTicketClick(ticket.id)}
-                  >
-                    <div className="flex items-start justify-between space-x-4">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center space-x-3 mb-2">
-                          <span className="text-sm font-mono text-gray-500">#{ticket.id}</span>
+          <div className="flex-1 overflow-auto p-8">
+            <div className="bg-card rounded-xl shadow-sm border overflow-hidden">
+              {isLoading && tickets.length === 0 ? (
+                <div className="flex items-center justify-center p-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : error ? (
+                <div className="p-8">
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                </div>
+              ) : tickets.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-16 text-center">
+                  <div className="bg-muted p-4 rounded-full mb-4">
+                    <MessageSquare className="h-10 w-10 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-foreground mb-2">No tickets found</h3>
+                  <p className="text-muted-foreground max-w-sm mb-6">
+                    No tickets matched your search criteria. Try adjusting your filters or create a new ticket.
+                  </p>
+                  <Button onClick={() => setFilters({
+                    search: "",
+                    statuses: [],
+                    priorities: [],
+                    categories: [],
+                    assignedEntities: [],
+                    createdByEntities: [],
+                    fromDate: null,
+                    toDate: null,
+                    includeUserTeamsForTeams: false,
+                    includeUserTeamsForCreatedByTeams: false,
+                  })}
+                    variant="outline">
+                    Clear all filters
+                  </Button>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead className="w-[80px]">ID</TableHead>
+                      <TableHead className="w-[140px]">Status</TableHead>
+                      <TableHead className="w-[120px]">Priority</TableHead>
+                      <TableHead className="min-w-[300px]">Subject</TableHead>
+                      <TableHead className="w-[180px]">Requester</TableHead>
+                      <TableHead className="w-[180px]">Assigned To</TableHead>
+                      <TableHead className="w-[140px] text-right">Updated</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tickets.map((ticket) => (
+                      <TableRow
+                        key={ticket.id}
+                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => handleTicketClick(ticket.id)}
+                      >
+                        <TableCell className="font-mono text-muted-foreground font-medium">#{ticket.id}</TableCell>
+                        <TableCell>
                           <Badge
-                            className="text-xs font-semibold"
+                            variant="secondary"
+                            className="text-xs font-semibold px-2.5 py-0.5 rounded-full border-0"
                             style={{
-                              backgroundColor: getStatusColor(ticket.currentStatusId),
-                              color: getContrastColor(getStatusColor(ticket.currentStatusId)),
+                              backgroundColor: `${getStatusColor(ticket.currentStatusId)}20`, // 12% opacity background
+                              color: getStatusColor(ticket.currentStatusId),
+                              boxShadow: `0 0 0 1px ${getStatusColor(ticket.currentStatusId)}40 inset`
                             }}
                           >
                             {getStatusName(ticket.currentStatusId)}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
                           <Badge
-                            className="text-xs font-semibold"
+                            variant="secondary"
+                            className="text-xs font-semibold px-2.5 py-0.5 rounded-full border-0"
                             style={{
-                              backgroundColor: getPriorityColor(ticket.currentPriorityId),
-                              color: getContrastColor(getPriorityColor(ticket.currentPriorityId)),
+                              backgroundColor: `${getPriorityColor(ticket.currentPriorityId)}20`,
+                              color: getPriorityColor(ticket.currentPriorityId),
+                              boxShadow: `0 0 0 1px ${getPriorityColor(ticket.currentPriorityId)}40 inset`
                             }}
                           >
                             {getPriorityName(ticket.currentPriorityId)}
                           </Badge>
-                        </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col max-w-[500px]">
+                            <span className="font-medium text-foreground truncate block mb-0.5">
+                              {ticket.title}
+                            </span>
+                            <span className="text-xs text-muted-foreground truncate block font-normal">
+                              {ticket.body}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm rounded hover:bg-muted px-2 py-1 -ml-2 transition-colors">
+                              {ticket.createdBy.name}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {ticket.currentAssignedTo ? (
+                              <span className="text-sm text-foreground bg-muted/50 px-2 py-1 rounded">
+                                {ticket.currentAssignedTo.name}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-muted-foreground italic">Unassigned</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground whitespace-nowrap">
+                          {formatDistanceToNow(new Date(ticket.updatedAt), { addSuffix: true })}
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                                <span className="sr-only">Actions</span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => handleTicketClick(ticket.id)}>
+                                <Eye className="h-4 w-4 mr-2" />
+                                View ticket
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  navigator.clipboard.writeText(ticket.id.toString())
+                                }}
+                              >
+                                Copy ticket ID
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
 
-                        <h2 className="text-base font-semibold text-gray-800 truncate mb-1">{ticket.title}</h2>
-
-                        <p className="text-sm text-gray-600 line-clamp-1 mb-2">
-                          <span className="font-medium">{ticket.createdBy.name}</span>
-                          <span className="text-gray-400 mx-1">&middot;</span>
-                          {ticket.body}
-                        </p>
-
-                        {/* Compact time display */}
-                        <div className="flex items-center space-x-4 text-xs text-gray-500">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="flex items-center space-x-1 cursor-help">
-                                <Clock className="h-3 w-3" />
-                                <span>
-                                  Created {formatDistanceToNow(new Date(ticket.createdAt), { addSuffix: true })}
-                                </span>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Created: {format(new Date(ticket.createdAt), "MMM dd, yyyy 'at' HH:mm")}</p>
-                            </TooltipContent>
-                          </Tooltip>
-
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="flex items-center space-x-1 cursor-help">
-                                <Edit className="h-3 w-3" />
-                                <span>
-                                  Updated {formatDistanceToNow(new Date(ticket.updatedAt), { addSuffix: true })}
-                                </span>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Updated: {format(new Date(ticket.updatedAt), "MMM dd, yyyy 'at' HH:mm")}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-2 flex-shrink-0">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => handleTicketClick(ticket.id)}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              View ticket
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                navigator.clipboard.writeText(ticket.id.toString())
-                              }}
-                            >
-                              Copy ticket ID
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+            {pagination && pagination.totalPages > 1 && (
+              <div className="mt-6 flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">
+                  Showing <span className="font-medium text-foreground">{pagination.startIndex}</span> to <span className="font-medium text-foreground">{pagination.endIndex}</span> of <span className="font-medium text-foreground">{pagination.totalItems}</span> results
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="h-8 w-8 p-0"
+                  >
+                    <span className="sr-only">Previous page</span>
+                    <span aria-hidden>&larr;</span>
+                  </Button>
+                  <div className="flex items-center gap-1">
+                    {/* Simplified Pagination: Just generic Prev/Next for now to match shadcn style */}
+                    <span className="text-sm px-2">Page {currentPage} of {pagination.totalPages}</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(pagination.totalPages!, p + 1))}
+                    disabled={currentPage === pagination.totalPages}
+                    className="h-8 w-8 p-0"
+                  >
+                    <span className="sr-only">Next page</span>
+                    <span aria-hidden>&rarr;</span>
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
-
-          {pagination && pagination.totalPages > 1 && (
-            <div className="px-6 py-3 border-t border-gray-200 text-sm text-gray-600 flex items-center justify-between">
-              <div>
-                Showing {pagination.startIndex} to {pagination.endIndex} of {pagination.totalItems} results
-              </div>
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage((p) => Math.min(pagination.totalPages, p + 1))}
-                  disabled={currentPage === pagination.totalPages}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
         </main>
       </div>
     </TooltipProvider>
