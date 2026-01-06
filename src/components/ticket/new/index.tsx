@@ -593,7 +593,7 @@ export default function NewTicketForm() {
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">Description</Label>
                       <div className="border border-border/40 rounded-lg overflow-hidden">
-                        <SimpleRichTextEditor content={body} onChange={setBody} />
+                        <SimpleRichTextEditor value={typeof body === "string" ? body : ""} onChange={(val) => setBody(val)} />
                       </div>
                       <p className="text-xs text-muted-foreground">Provide detailed information about the issue</p>
                     </div>
