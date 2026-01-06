@@ -156,18 +156,18 @@ export const SimpleRichTextEditor: React.FC<SimpleRichTextEditorProps> = ({
 
       const current = getActiveFormats()
 
-      // Toggle each format based on difference
-      ;["bold", "italic", "underline"].forEach((fmt) => {
-        const shouldBeOn = values.includes(fmt)
-        const isOn = current.includes(fmt)
-        if (shouldBeOn !== isOn) {
-          try {
-            document.execCommand(fmt, false)
-          } catch (e) {
-            console.warn(`Error executing command ${fmt}:`, e)
+        // Toggle each format based on difference
+        ;["bold", "italic", "underline"].forEach((fmt) => {
+          const shouldBeOn = values.includes(fmt)
+          const isOn = current.includes(fmt)
+          if (shouldBeOn !== isOn) {
+            try {
+              document.execCommand(fmt, false)
+            } catch (e) {
+              console.warn(`Error executing command ${fmt}:`, e)
+            }
           }
-        }
-      })
+        })
 
       // Update formats and trigger change
       updateFormats()

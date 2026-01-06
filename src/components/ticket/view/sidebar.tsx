@@ -521,7 +521,7 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
 
   if (isLoading) {
     return (
-      <Card className="bg-white shadow-sm">
+      <Card className="bg-card shadow-sm">
         <CardContent className="flex items-center justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin" />
         </CardContent>
@@ -530,7 +530,7 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -539,26 +539,26 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
       )}
 
       {/* Ticket Details */}
-      <Card className="bg-white shadow-sm">
-        <CardHeader className="pb-3">
+      <Card className="bg-card shadow-sm border-border">
+        <CardHeader className="pb-4 border-b border-border bg-muted/10">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg flex items-center">
-              <Settings className="h-5 w-5 mr-2" />
-              Ticket Details
+            <CardTitle className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center">
+              <Settings className="h-4 w-4 mr-2 text-muted-foreground" />
+              Properties
             </CardTitle>
             {onClose && (
-              <Button variant="ghost" size="sm" onClick={onClose}>
+              <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground">
                 <X className="h-4 w-4" />
               </Button>
             )}
           </div>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-6 pt-6">
           {/* Status */}
-          <div className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Status</span>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Status</label>
+              {isUpdating === "status" && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
             </div>
             {canChangeStatus() ? (
               <Select
@@ -566,12 +566,11 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
                 onValueChange={handleStatusChange}
                 disabled={isUpdating === "status"}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full h-10 bg-muted/10 border-border hover:bg-card hover:border-border transition-colors focus:ring-1 focus:ring-ring">
                   <SelectValue>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ticket.currentStatus.color }} />
-                      <span>{ticket.currentStatus.name}</span>
-                      {isUpdating === "status" && <Loader2 className="h-3 w-3 animate-spin ml-auto" />}
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-2.5 h-2.5 rounded-full ring-2 ring-transparent transition-all" style={{ backgroundColor: ticket.currentStatus.color }} />
+                      <span className="font-medium text-foreground">{ticket.currentStatus.name}</span>
                     </div>
                   </SelectValue>
                 </SelectTrigger>
@@ -580,8 +579,8 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
                     .filter((s) => canChangeStatus(s.id))
                     .map((status) => (
                       <SelectItem key={status.id} value={status.id.toString()}>
-                        <div className="flex items-center space-x-2">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: status.color }} />
+                        <div className="flex items-center space-x-2.5">
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: status.color }} />
                           <span>{status.name}</span>
                         </div>
                       </SelectItem>
@@ -589,20 +588,20 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
                 </SelectContent>
               </Select>
             ) : (
-              <div className="flex items-center space-x-2 p-2 bg-gray-50 rounded-md">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ticket.currentStatus.color }} />
-                <span className="text-sm">{ticket.currentStatus.name}</span>
+              <div className="flex items-center space-x-2.5 p-2.5 bg-muted/10 rounded-md border border-border">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: ticket.currentStatus.color }} />
+                <span className="text-sm font-medium text-foreground">{ticket.currentStatus.name}</span>
               </div>
             )}
           </div>
 
-          <Separator />
+          <Separator className="bg-border" />
 
           {/* Priority */}
-          <div className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <Flag className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Priority</span>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Priority</label>
+              {isUpdating === "priority" && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
             </div>
             {canChangePriority() ? (
               <Select
@@ -610,12 +609,11 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
                 onValueChange={handlePriorityChange}
                 disabled={isUpdating === "priority"}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full h-10 bg-muted/10 border-border hover:bg-card hover:border-border transition-colors focus:ring-1 focus:ring-ring">
                   <SelectValue>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ticket.currentPriority.color }} />
-                      <span>{ticket.currentPriority.name}</span>
-                      {isUpdating === "priority" && <Loader2 className="h-3 w-3 animate-spin ml-auto" />}
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-2.5 h-2.5 rounded-full ring-2 ring-transparent" style={{ backgroundColor: ticket.currentPriority.color }} />
+                      <span className="font-medium text-foreground">{ticket.currentPriority.name}</span>
                     </div>
                   </SelectValue>
                 </SelectTrigger>
@@ -624,8 +622,8 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
                     .filter((p) => canChangePriority(p.id))
                     .map((priority) => (
                       <SelectItem key={priority.id} value={priority.id.toString()}>
-                        <div className="flex items-center space-x-2">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: priority.color }} />
+                        <div className="flex items-center space-x-2.5">
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: priority.color }} />
                           <span>{priority.name}</span>
                         </div>
                       </SelectItem>
@@ -633,20 +631,20 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
                 </SelectContent>
               </Select>
             ) : (
-              <div className="flex items-center space-x-2 p-2 bg-gray-50 rounded-md">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ticket.currentPriority.color }} />
-                <span className="text-sm">{ticket.currentPriority.name}</span>
+              <div className="flex items-center space-x-2.5 p-2.5 bg-muted/10 rounded-md border border-border">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: ticket.currentPriority.color }} />
+                <span className="text-sm font-medium text-foreground">{ticket.currentPriority.name}</span>
               </div>
             )}
           </div>
 
-          <Separator />
+          <Separator className="bg-border" />
 
           {/* Assignment */}
-          <div className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <User className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Assigned To</span>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Assigned To</label>
+              {isUpdating === "assignment" && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
             </div>
 
             {canChangeAssignment() ? (
@@ -656,45 +654,44 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
                     variant="outline"
                     role="combobox"
                     aria-expanded={assignOpen}
-                    className="w-full justify-between h-10 bg-white"
+                    className="w-full justify-between h-10 bg-muted/10 border-border hover:bg-card hover:border-border transition-all focus:ring-1 focus:ring-ring px-3"
                     disabled={isUpdating === "assignment"}
                   >
                     {ticket.currentAssignedTo?.entityId ? (
-                      <div className="flex items-center gap-2 truncate">
-                        <Avatar className="h-6 w-6">
-                          <AvatarFallback className="text-xs">
+                      <div className="flex items-center gap-2.5 truncate w-full">
+                        <Avatar className="h-5 w-5 border border-border">
+                          <AvatarFallback className="text-[10px] bg-muted text-muted-foreground font-medium">
                             {getEntityInitials(
                               flatEntities.find((e) => e.entityId === ticket.currentAssignedTo?.entityId.toString())?.name ||
                               "",
                             )}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="truncate">
+                        <span className="truncate font-medium text-foreground text-sm">
                           {
                             flatEntities.find((e) => e.entityId === ticket.currentAssignedTo?.entityId.toString())
-                              ?.fullPath
+                              ?.name || "Unknown"
                           }
                         </span>
                       </div>
                     ) : (
-                      <span className="text-muted-foreground">Select team or user...</span>
+                      <span className="text-muted-foreground font-normal">Select team or user...</span>
                     )}
-                    {isUpdating === "assignment" ? (
-                      <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin" />
-                    ) : (
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-40" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[400px] p-0" align="start">
-                  <Command shouldFilter={false}>
-                    <CommandInput
-                      placeholder="Search teams and users..."
-                      value={assignSearch}
-                      onValueChange={setAssignSearch}
-                    />
-                    <CommandList>
-                      <CommandEmpty>No teams or users found.</CommandEmpty>
+                <PopoverContent className="w-[320px] p-0" align="start" sideOffset={8}>
+                  <Command shouldFilter={false} className="border-0">
+                    <div className="p-2 border-b border-border">
+                      <CommandInput
+                        placeholder="Search..."
+                        value={assignSearch}
+                        onValueChange={setAssignSearch}
+                        className="h-9"
+                      />
+                    </div>
+                    <CommandList className="max-h-[300px] p-1">
+                      <CommandEmpty className="py-6 text-center text-sm text-gray-500">No teams or users found.</CommandEmpty>
                       <CommandGroup>
                         {filteredEntities.map((entity, idx) => (
                           <CommandItem
@@ -706,51 +703,30 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
                               setAssignSearch("")
                             }}
                             className={cn(
-                              "cursor-pointer",
-                              entity.type === "team"
-                                ? "bg-slate-50 dark:bg-slate-900 font-medium"
-                                : "pl-2 border-l-2 border-slate-200 dark:border-slate-700",
-                              entity.type === "team" && idx > 0
-                                ? "mt-1 pt-1 border-t border-slate-200 dark:border-slate-700"
-                                : "",
+                              "cursor-pointer rounded-md aria-selected:bg-muted aria-selected:text-foreground my-0.5",
+                              entity.type === "team" ? "font-semibold text-foreground" : "font-normal text-muted-foreground"
                             )}
                           >
-                            <div className="flex items-center gap-3 w-full">
-                              <Avatar className="h-8 w-8">
-                                <AvatarFallback className="text-xs">{getEntityInitials(entity.name)}</AvatarFallback>
+                            <div className="flex items-center gap-3 w-full py-0.5">
+                              <Avatar className="h-6 w-6 border border-border">
+                                <AvatarFallback className="text-[10px] bg-card">{getEntityInitials(entity.name)}</AvatarFallback>
                               </Avatar>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-medium truncate">
-                                    {"\u00A0".repeat(entity.level * 2)}
+                                  <span className="truncate">
                                     {entity.name}
                                   </span>
-                                  <Badge variant={entity.type === "team" ? "default" : "secondary"} className="text-xs">
-                                    {entity.type === "team" ? (
-                                      <>
-                                        <Users className="h-3 w-3 mr-1" />
-                                        Team
-                                      </>
-                                    ) : (
-                                      <>
-                                        <User className="h-3 w-3 mr-1" />
-                                        User
-                                      </>
-                                    )}
+                                  <Badge variant={entity.type === "team" ? "secondary" : "outline"} className="text-[10px] h-4 px-1 rounded-sm border-border text-muted-foreground font-normal ml-auto">
+                                    {entity.type === "team" ? "Team" : "User"}
                                   </Badge>
                                 </div>
                                 {entity.level > 0 && (
-                                  <p className="text-xs text-muted-foreground truncate">{entity.fullPath}</p>
+                                  <p className="text-[10px] text-muted-foreground/60 truncate mt-0.5">{entity.fullPath}</p>
                                 )}
                               </div>
-                              <Check
-                                className={cn(
-                                  "ml-auto h-4 w-4",
-                                  ticket.currentAssignedTo?.entityId.toString() === entity.entityId
-                                    ? "opacity-100"
-                                    : "opacity-0",
-                                )}
-                              />
+                              {ticket.currentAssignedTo?.entityId.toString() === entity.entityId && (
+                                <Check className="h-3 w-3 text-primary" />
+                              )}
                             </div>
                           </CommandItem>
                         ))}
@@ -760,37 +736,42 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
                 </PopoverContent>
               </Popover>
             ) : (
-              <div className="p-2 bg-gray-50 rounded-md">
-                <span className="text-sm">{ticket.currentAssignedTo?.name || "Unassigned"}</span>
+              <div className="p-2.5 bg-muted/10 rounded-md border border-border flex items-center gap-2">
+                <Avatar className="h-5 w-5 border border-border">
+                  <AvatarFallback className="text-[10px] bg-card text-muted-foreground">
+                    <User className="h-3 w-3" />
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium text-foreground">{ticket.currentAssignedTo?.name || "Unassigned"}</span>
               </div>
             )}
 
             {/* Claim Button */}
             {canClaimTicket() && ticket.currentAssignedTo && (
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={handleClaimTicket}
                 disabled={isUpdating === "claim"}
-                className="w-full bg-transparent"
+                className="w-full mt-2"
               >
                 {isUpdating === "claim" ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="h-3 w-3 mr-2 animate-spin" />
                 ) : (
-                  <UserPlus className="h-4 w-4 mr-2" />
+                  <UserPlus className="h-3 w-3 mr-2" />
                 )}
-                Claim Ticket
+                Claim this Ticket
               </Button>
             )}
           </div>
 
-          <Separator />
+          <Separator className="bg-border" />
 
           {/* Category */}
-          <div className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <FolderTree className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Category</span>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Category</label>
+              {isUpdating === "category" && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
             </div>
             {canChangeCategory() ? (
               <Select
@@ -798,14 +779,14 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
                 onValueChange={handleCategoryChange}
                 disabled={isUpdating === "category"}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full h-10 bg-muted/10 border-border hover:bg-card hover:border-border transition-colors focus:ring-1 focus:ring-ring">
                   <SelectValue>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm truncate">
-                        {flatCategories.find((c) => c.id === ticket.currentCategory.id)?.fullPath ||
+                    <div className="flex items-center space-x-2.5">
+                      <FolderTree className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium text-foreground truncate">
+                        {flatCategories.find((c) => c.id === ticket.currentCategory.id)?.name ||
                           ticket.currentCategory.name}
                       </span>
-                      {isUpdating === "category" && <Loader2 className="h-3 w-3 animate-spin ml-auto" />}
                     </div>
                   </SelectValue>
                 </SelectTrigger>
@@ -814,8 +795,12 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
                     .filter((c) => canChangeCategory(c.id))
                     .map((category) => (
                       <SelectItem key={category.id} value={category.id.toString()}>
-                        <span className="block w-full">
-                          {"\u00A0".repeat(category.level * 4)}
+                        <span className="flex items-center">
+                          {category.level > 0 && (
+                            <span className="mr-2 text-muted-foreground/40">
+                              {"\u00A0\u00A0".repeat(category.level)}↳
+                            </span>
+                          )}
                           {category.name}
                         </span>
                       </SelectItem>
@@ -823,8 +808,9 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
                 </SelectContent>
               </Select>
             ) : (
-              <div className="p-2 bg-gray-50 rounded-md">
-                <span className="text-sm">{ticket.currentCategory.name}</span>
+              <div className="p-2.5 bg-muted/10 rounded-md border border-border flex items-center gap-2">
+                <FolderTree className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-foreground">{ticket.currentCategory.name}</span>
               </div>
             )}
           </div>
@@ -832,36 +818,42 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
       </Card>
 
       {/* Ticket Info */}
-      <Card className="bg-white shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center">
-            <Calendar className="h-5 w-5 mr-2" />
-            Information
+      <Card className="bg-card shadow-sm border-border">
+        <CardHeader className="pb-4 border-b border-border bg-muted/10">
+          <CardTitle className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center">
+            <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
+            Meta Information
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Created</span>
-              <span className="font-medium">{format(new Date(ticket.createdAt), "MMM d, yyyy")}</span>
+        <CardContent className="space-y-4 pt-4">
+          <div className="space-y-4 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground text-xs">Created On</span>
+              <span className="font-medium text-foreground">{format(new Date(ticket.createdAt), "MMM d, yyyy")}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Updated</span>
-              <span className="font-medium">{format(new Date(ticket.updatedAt), "MMM d, yyyy")}</span>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground text-xs">Last Updated</span>
+              <span className="font-medium text-foreground">{format(new Date(ticket.updatedAt), "MMM d, yyyy")}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Created by</span>
-              <span className="font-medium">{ticket.createdBy.name}</span>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground text-xs">Created By</span>
+              <div className="flex items-center gap-2">
+                <Avatar className="h-5 w-5 border border-border">
+                  <AvatarFallback className="text-[9px] bg-muted/50 text-muted-foreground">{getEntityInitials(ticket.createdBy.name)}</AvatarFallback>
+                </Avatar>
+                <span className="font-medium text-foreground">{ticket.createdBy.name}</span>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Ticket ID</span>
-              <Badge variant="outline" className="font-mono">
+            <Separator className="bg-border" />
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground text-xs">Internal ID</span>
+              <span className="font-mono text-xs text-muted-foreground bg-muted/30 px-1.5 py-0.5 rounded border border-border/50">
                 #{ticket.id}
-              </Badge>
+              </span>
             </div>
           </div>
         </CardContent>
       </Card>
-    </div>
+    </div >
   )
 }
