@@ -18,26 +18,34 @@ export const authOptions: NextAuthOptions = {
         // extending coverage to cases where the public URL is not resolvable from the container
         const baseUrl = process.env.NEXTAUTH_URL_INTERNAL || process.env.NEXTAUTH_URL
 
-        const res = await fetch(`${baseUrl}/api/auth/verify-otp`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: credentials.email,
-            otp: credentials.otp,
-          }),
-        })
+        console.log(`[NextAuth] Verifying OTP. BaseURL: ${baseUrl}`)
+        console.log(`[NextAuth] Env Vars - INTERNAL: ${process.env.NEXTAUTH_URL_INTERNAL}, PUBLIC: ${process.env.NEXTAUTH_URL}`)
 
-        const user = await res.json()
-
-        // ✅ Check if user is active before allowing login
-        if (res.ok && user?.id) {
-          const dbUser = await prisma.user.findUnique({
-            where: { id: user.id },
-            select: { Active: true },
+        try {
+          const res = await fetch(`${baseUrl}/api/auth/verify-otp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: credentials.email,
+              otp: credentials.otp,
+            }),
           })
 
-          if (!dbUser?.Active) return null
-          return user
+          const user = await res.json()
+
+          // ✅ Check if user is active before allowing login
+          if (res.ok && user?.id) {
+            const dbUser = await prisma.user.findUnique({
+              where: { id: user.id },
+              select: { Active: true },
+            })
+
+            if (!dbUser?.Active) return null
+            return user
+          }
+        } catch (error) {
+          console.error('[NextAuth] OTP Verification Fetch Failed:', error)
+          return null
         }
 
         return null
