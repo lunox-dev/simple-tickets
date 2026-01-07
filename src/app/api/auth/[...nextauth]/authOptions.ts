@@ -9,12 +9,16 @@ export const authOptions: NextAuthOptions = {
       name: 'Email + OTP',
       credentials: {
         email: { label: 'Email', type: 'email' },
-        otp:   { label: 'OTP',   type: 'text' },
+        otp: { label: 'OTP', type: 'text' },
       },
       async authorize(credentials) {
         if (!credentials) return null
 
-        const res = await fetch(`${process.env.NEXTAUTH_URL}/api/auth/verify-otp`, {
+        // Use the internal URL for server-to-server calls if available (e.g. Docker/K8s)
+        // extending coverage to cases where the public URL is not resolvable from the container
+        const baseUrl = process.env.NEXTAUTH_URL_INTERNAL || process.env.NEXTAUTH_URL
+
+        const res = await fetch(`${baseUrl}/api/auth/verify-otp`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -53,13 +57,13 @@ export const authOptions: NextAuthOptions = {
           userTeams: {
             where: { Active: true },
             include: {
-              team:     true,
+              team: true,
               entities: true,
             },
           },
           actionUserTeam: {
             include: {
-              team:     true,
+              team: true,
               entities: true,
             },
           },
@@ -85,10 +89,10 @@ export const authOptions: NextAuthOptions = {
         const entityId = ut.entities[0]?.id ?? null
 
         teams.push({
-          userTeamId:          ut.id,
-          teamId:              ut.teamId,
-          name:                ut.team.name,
-          permissions:         [...new Set(ut.team.permissions)],
+          userTeamId: ut.id,
+          teamId: ut.teamId,
+          name: ut.team.name,
+          permissions: [...new Set(ut.team.permissions)],
           userTeamPermissions: ut.permissions,
           entityId,
         })
@@ -111,10 +115,10 @@ export const authOptions: NextAuthOptions = {
       }
 
       session.user = {
-        id:               user.id,
-        name:             user.displayName,
-        email:            user.email,
-        permissions:      user.permissions,
+        id: user.id,
+        name: user.displayName,
+        email: user.email,
+        permissions: user.permissions,
         teams,
         actionUserTeamId: user.actionUserTeamId,
         actingAs,
