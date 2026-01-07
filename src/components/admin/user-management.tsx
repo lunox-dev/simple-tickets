@@ -105,6 +105,18 @@ export default function UserManagement() {
       return
     }
 
+    const mobile = createForm.mobile.trim()
+    if (mobile) {
+      if (!mobile.startsWith('+')) {
+        setError('Mobile number must start with + (country code)')
+        return
+      }
+      if (mobile.includes(' ')) {
+        setError('Mobile number must not contain spaces')
+        return
+      }
+    }
+
     setIsCreating(true)
     setError(null)
     setSuccess(null)
@@ -121,7 +133,7 @@ export default function UserManagement() {
         body: JSON.stringify({
           email: createForm.email.trim(),
           displayName: createForm.displayName.trim(),
-          mobile: createForm.mobile.trim() || undefined,
+          mobile: mobile || undefined,
           permissions,
         }),
       })
@@ -148,6 +160,18 @@ export default function UserManagement() {
       return
     }
 
+    const mobile = editForm.mobile.trim()
+    if (mobile) {
+      if (!mobile.startsWith('+')) {
+        setError('Mobile number must start with + (country code)')
+        return
+      }
+      if (mobile.includes(' ')) {
+        setError('Mobile number must not contain spaces')
+        return
+      }
+    }
+
     setIsEditing(true)
     setError(null)
     setSuccess(null)
@@ -165,7 +189,7 @@ export default function UserManagement() {
           userId: editForm.userId,
           email: editForm.email.trim(),
           displayName: editForm.displayName.trim(),
-          mobile: editForm.mobile.trim() || undefined,
+          mobile: mobile || undefined,
           permissions,
           Active: editForm.Active,
         }),

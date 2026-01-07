@@ -81,8 +81,16 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
     if (err.code === 'P2002') {
-      // Unique constraint failed (email)
-      return NextResponse.json({ error: 'Email already exists' }, { status: 409 })
+      const target = err.meta?.target
+      if (Array.isArray(target)) {
+        if (target.includes('email')) {
+          return NextResponse.json({ error: 'Email already exists' }, { status: 409 })
+        }
+        if (target.includes('mobile')) {
+          return NextResponse.json({ error: 'Mobile number already exists' }, { status: 409 })
+        }
+      }
+      return NextResponse.json({ error: 'Unique constraint violation' }, { status: 409 })
     }
     console.error('Error modifying user:', err)
     return NextResponse.json({ error: 'Failed to modify user' }, { status: 500 })

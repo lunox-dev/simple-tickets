@@ -21,13 +21,13 @@ export function verifyChangePermission(
       // Support permission strings with 'from:' and 'to:' in the nodes
       let pFrom, pTo, pContext, pScope
       if (parts[4] === 'from' && parts[6] === 'to') {
-        // Format: ticket:action:change:status:from:any:to:any:assigned:any
+        // Format: ticket:action:change:status:from:any:to:any[:assigned:any]
         pFrom = parts[5]
         pTo = parts[7]
         pContext = parts[8]
         pScope = parts[9]
       } else {
-        // Fallback to old format: ticket:action:change:status:any:any:assigned:any
+        // Fallback to old format: ticket:action:change:status:any:any[:assigned:any]
         pFrom = parts[4]
         pTo = parts[5]
         pContext = parts[6]
@@ -36,6 +36,12 @@ export function verifyChangePermission(
 
       if (pFrom !== 'any' && Number(pFrom) !== fromId) continue
       if (pTo !== 'any' && Number(pTo) !== toId) continue
+
+      // If there is no context/scope (e.g. ticket:action:change:status:from:5:to:3),
+      // it means this is an unconditional permission for this transition.
+      if (!pContext && !pScope) {
+        return // Authorized
+      }
 
       for (const via of access.accessVia) {
 
