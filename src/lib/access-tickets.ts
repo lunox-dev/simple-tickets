@@ -77,7 +77,7 @@ export async function getAccessibleTicketsByUser(
   const allEntityIds = [...userTeamEntityIds, ...teamEntityIds]
 
   // Check if user has any "any" permissions that grant access to all tickets
-  const hasAnyReadAny = userTeamPerms.some(p => 
+  const hasAnyReadAny = userTeamPerms.some(p =>
     p.permission === 'ticket:read:createdby:any' || p.permission === 'ticket:read:assigned:any'
   )
 
@@ -91,6 +91,7 @@ export async function getAccessibleTicketsByUser(
         if (p.type === 'assignment') {
           if (p.permission === 'ticket:read:assigned:team:any') {
             conds.push({ currentAssignedTo: { teamId: p.teamId } })
+            conds.push({ currentAssignedTo: { userTeam: { teamId: p.teamId } } })
             // Entity-aware: also allow if currentAssignedToId is the team entity
             const teamEntity = teamEntities.find(e => e.teamId === p.teamId)
             if (teamEntity) conds.push({ currentAssignedToId: teamEntity.id })
@@ -108,6 +109,7 @@ export async function getAccessibleTicketsByUser(
         } else if (p.type === 'creation') {
           if (p.permission === 'ticket:read:createdby:team:any') {
             conds.push({ createdBy: { teamId: p.teamId } })
+            conds.push({ createdBy: { userTeam: { teamId: p.teamId } } })
             // Entity-aware: also allow if createdById is the team entity
             const teamEntity = teamEntities.find(e => e.teamId === p.teamId)
             if (teamEntity) conds.push({ createdById: teamEntity.id })
@@ -128,8 +130,8 @@ export async function getAccessibleTicketsByUser(
     where: whereClause,
     select: {
       id: true,
-      currentAssignedTo: { select: { teamId: true, userTeamId: true } },
-      createdBy: { select: { teamId: true, userTeamId: true } }
+      currentAssignedTo: { select: { teamId: true, userTeamId: true, userTeam: { select: { teamId: true } } } },
+      createdBy: { select: { teamId: true, userTeamId: true, userTeam: { select: { teamId: true } } } }
     },
     take: limit
   })
@@ -145,11 +147,14 @@ export async function getAccessibleTicketsByUser(
       const assigned = ticket.currentAssignedTo
       const created = ticket.createdBy
 
+      const assignedTeamId = assigned?.teamId ?? assigned?.userTeam?.teamId
+      const createdTeamId = created?.teamId ?? created?.userTeam?.teamId
+
       if (rule.type === 'assignment') {
         if (
           rule.permission === 'ticket:read:assigned:any' ||
-          (rule.permission === 'ticket:read:assigned:team:any' && assigned?.teamId === rule.teamId) ||
-          (rule.permission === 'ticket:read:assigned:team:unclaimed' && assigned?.teamId === rule.teamId && assigned?.userTeamId == null) ||
+          (rule.permission === 'ticket:read:assigned:team:any' && assignedTeamId === rule.teamId) ||
+          (rule.permission === 'ticket:read:assigned:team:unclaimed' && assignedTeamId === rule.teamId && assigned?.userTeamId == null) ||
           (rule.permission === 'ticket:read:assigned:self' && assigned?.userTeamId === rule.userTeamId)
         ) {
           ways.push({
@@ -163,7 +168,7 @@ export async function getAccessibleTicketsByUser(
       } else if (rule.type === 'creation') {
         if (
           rule.permission === 'ticket:read:createdby:any' ||
-          (rule.permission === 'ticket:read:createdby:team:any' && created?.teamId === rule.teamId) ||
+          (rule.permission === 'ticket:read:createdby:team:any' && createdTeamId === rule.teamId) ||
           (rule.permission === 'ticket:read:createdby:self' && created?.userTeamId === rule.userTeamId)
         ) {
           ways.push({
