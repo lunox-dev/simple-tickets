@@ -61,6 +61,21 @@ interface TicketViewData {
   ticket: TicketData
   lastReadEvent: { type: string; id: number } | null
   activityLog: ActivityLogEntry[]
+  meta: {
+    statuses: { id: number; name: string; color: string }[]
+    priorities: { id: number; name: string; color: string }[]
+    categories: { id: number; name: string; parentId: number | null; childDropdownLabel?: string | null }[]
+    categoryTree: any[]
+    entities: any[]
+  }
+  allowedActions: {
+    allowedStatuses: number[]
+    allowedPriorities: number[]
+    allowedCategories: number[]
+    allowedAssignees: string[]
+    canClaim: boolean
+    canReply: boolean
+  }
 }
 
 interface TicketViewProps {
@@ -137,47 +152,7 @@ export default function TicketView({ ticketId }: TicketViewProps) {
     fetchTicketData(true)
   }
 
-  const canCreateThread = (): boolean => {
-    if (!data) return false
 
-    const threadPermissions = data.user.permissions.filter((p) => p.startsWith("ticket:action:thread:create:"))
-
-    return threadPermissions.some((p) => {
-      const parts = p.split(":")
-      if (parts.length < 5) return false
-
-      const scope = parts[4] // self, team, team:unclaimed, any
-
-      if (scope === "any") return true
-
-      if (scope === "team") {
-        const assignedTeamId = data.ticket.currentAssignedTo?.teamId
-        // Also check if assigned to a userTeam, which has a teamId
-        const userTeamTeamId = data.ticket.currentAssignedTo?.type === 'user' ? data.ticket.currentAssignedTo.teamId : null
-
-        const effectiveTeamId = assignedTeamId || userTeamTeamId
-        if (!effectiveTeamId) return false
-
-        return data.user.teams.some(t => t.teamId === effectiveTeamId)
-      }
-
-      if (scope === "team:unclaimed") {
-        // Must be assigned to one of my teams AND not assigned to a specific user
-        const assignedTeamId = data.ticket.currentAssignedTo?.teamId
-        if (!assignedTeamId) return false
-        if (data.ticket.currentAssignedTo?.userTeamId) return false // It IS claimed
-
-        return data.user.teams.some(t => t.teamId === assignedTeamId)
-      }
-
-      if (scope === "self") {
-        if (!data.ticket.currentAssignedTo?.userTeamId) return false
-        return data.user.teams.some(t => t.id === data.ticket.currentAssignedTo!.userTeamId)
-      }
-
-      return false
-    })
-  }
 
   // Show loading while checking authentication
   if (status === "loading" || isLoading) {
@@ -308,7 +283,7 @@ export default function TicketView({ ticketId }: TicketViewProps) {
             </div>
 
             <div className="flex items-center gap-2 flex-shrink-0">
-              {!showReplyForm && canCreateThread() && (
+              {!showReplyForm && data.allowedActions.canReply && (
                 <Button onClick={() => setShowReplyForm(true)} size="sm" className="shadow-sm">
                   <Reply className="h-4 w-4 mr-2" />
                   Reply
@@ -375,7 +350,7 @@ export default function TicketView({ ticketId }: TicketViewProps) {
               ticketId={ticketId}
             />
 
-            {showReplyForm && canCreateThread() && (
+            {showReplyForm && data.allowedActions.canReply && (
               <div className="scroll-mt-24" id="reply-form">
                 <Card className="bg-card shadow-lg shadow-black/5 border-border overflow-hidden ring-1 ring-border">
                   <div className="px-5 py-3 border-b border-border bg-muted/20 flex items-center justify-between">
@@ -408,6 +383,8 @@ export default function TicketView({ ticketId }: TicketViewProps) {
               <TicketSidebar
                 ticket={ticket}
                 user={data.user}
+                meta={data.meta}
+                allowedActions={data.allowedActions}
                 onTicketUpdate={handleTicketUpdate}
                 onClose={() => setSidebarOpen(false)}
               />

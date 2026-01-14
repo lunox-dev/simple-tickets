@@ -13,7 +13,7 @@ const connection = new IORedis(process.env.REDIS_URL!, {
   maxRetriesPerRequest: null,
 })
 
-new Worker('notifications', async job => {
+const senderWorker = new Worker('notifications', async job => {
   if (job.name !== 'notification-delivery') return
   const { eventId } = job.data
 
@@ -178,6 +178,26 @@ new Worker('notifications', async job => {
   }
 }, { connection })
 
+senderWorker.on('ready', () => {
+  console.log('[NotificationWorker] Worker connected and ready!')
+})
+
+senderWorker.on('active', job => {
+  console.log(`[NotificationWorker] Job ${job.id} started (name: ${job.name})`)
+})
+
+senderWorker.on('completed', job => {
+  console.log(`[NotificationWorker] Job ${job.id} completed`)
+})
+
+senderWorker.on('failed', (job, err) => {
+  console.error(`[NotificationWorker] Job ${job?.id} failed:`, err)
+})
+
+senderWorker.on('error', err => {
+  console.error(`[NotificationWorker] Worker error:`, err)
+})
+
 async function loadTemplate(type: 'email' | 'sms', eventType: string, context: any) {
   const ext = type === 'email' ? 'html' : 'txt'
   const basePath = path.join(process.cwd(), 'src/notifications/templates', type)
@@ -233,11 +253,11 @@ async function buildContext(user: any, event: any, ticketPriorityId?: number) {
   let ticketId: number | undefined = undefined
 
   // Determine ticketId from event
-  if (event.onThread)            ticketId = event.onThread.ticketId
+  if (event.onThread) ticketId = event.onThread.ticketId
   else if (event.onAssignmentChange) ticketId = event.onAssignmentChange.ticketId
-  else if (event.onPriorityChange)   ticketId = event.onPriorityChange.ticketId
-  else if (event.onStatusChange)     ticketId = event.onStatusChange.ticketId
-  else if (event.onCategoryChange)   ticketId = event.onCategoryChange.ticketId
+  else if (event.onPriorityChange) ticketId = event.onPriorityChange.ticketId
+  else if (event.onStatusChange) ticketId = event.onStatusChange.ticketId
+  else if (event.onCategoryChange) ticketId = event.onCategoryChange.ticketId
 
   // Load full ticket
   if (ticketId) {

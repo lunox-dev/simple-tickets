@@ -3,10 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma } from '@/lib/prisma'
 import { enqueueNotificationInit } from '@/lib/notification-queue'
-import { verifyAssignmentChangePermission } from '@/lib/access-ticket-assignment'
+import { verifyChangePermission } from '@/lib/access-ticket-change'
 import { handlePermissionError } from '@/lib/permission-error'
-
-
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -15,6 +13,7 @@ export async function POST(req: NextRequest) {
   }
   const userId = Number((session.user as any).id)
   const actingAs = (session.user as any).actingAs
+  const userPermissions = (session.user as any).permissions || []
 
   const { ticketId, entityId } = await req.json()
   if (!ticketId || !entityId) {
@@ -22,15 +21,28 @@ export async function POST(req: NextRequest) {
   }
 
   // Get ticket details
-  const ticket = await prisma.ticket.findUnique({
+  const ticketQuery = await prisma.ticket.findUnique({
     where: { id: ticketId },
     include: {
       currentAssignedTo: { select: { id: true, userTeamId: true, teamId: true } },
-      createdBy: { select: { id: true, userTeamId: true, teamId: true } }
+      createdBy: {
+        select: {
+          id: true,
+          userTeamId: true,
+          teamId: true,
+          userTeam: { select: { teamId: true } } // Fetch resolved team ID via userTeam
+        }
+      }
     }
   })
-  if (!ticket) {
+  if (!ticketQuery) {
     return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+  }
+
+  // Patch ticket createdBy teamId if null (for User entities)
+  const ticket: any = ticketQuery
+  if (ticket.createdBy && !ticket.createdBy.teamId && ticket.createdBy.userTeam?.teamId) {
+    ticket.createdBy.teamId = ticket.createdBy.userTeam.teamId
   }
 
   // Get target entity
@@ -39,20 +51,39 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Target entity not found' }, { status: 404 })
   }
 
-  // Get from and to userTeamIds
-  const fromUserTeamId = ticket.currentAssignedTo?.userTeamId ?? 0
-  const toUserTeamId = toEntity.userTeamId ?? 0
+  // Determine effective permissions and access context
+  let actionPermissions = userPermissions
+  const accessVia: any[] = []
 
-  // Check assignment change permission
-  const userTeams = session.user.teams.map((t: any) => ({
-    userTeamId: t.userTeamId,
-    userTeamPermissions: t.userTeamPermissions,
-    permissions: t.permissions
-  }))
+  if (actingAs) {
+    const activeTeam = (session.user as any).teams.find((t: any) => t.userTeamId === actingAs.userTeamId)
 
+    // Get team permissions
+    if (activeTeam && activeTeam.permissions) {
+      actionPermissions = activeTeam.permissions
+    }
+
+    // Add membership access via context
+    accessVia.push({
+      type: 'membership',
+      userTeamId: actingAs.userTeamId,
+      teamId: activeTeam?.teamId ?? actingAs.teamId,
+      permission: 'membership:active'
+    })
+  }
+
+  // Use Entity IDs for permission check
+  const fromEntityId = ticket.currentAssignedTo?.id ?? 0 // Entity ID
+  const toEntityId = toEntity.id // Entity ID
+
+  const access = {
+    actionPermissions,
+    accessVia
+  }
 
   try {
-    verifyAssignmentChangePermission(userTeams, fromUserTeamId, toUserTeamId)
+    // Cast ticket to any because verifyChangePermission expects headers that might differ slightly in optionality but structure matches
+    verifyChangePermission(access as any, ticket as any, 'assigned', fromEntityId, toEntityId)
   } catch (err) {
     return handlePermissionError(err)
   }
