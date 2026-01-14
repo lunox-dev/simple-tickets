@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { verifyTicketAccess, TicketAccessForUserResponse } from '@/lib/access-ticket-user'
 import { handlePermissionError } from '@/lib/permission-error'
 import { verifyChangePermission, hasThreadCreatePermission } from '@/lib/access-ticket-change'
-import { getEntitiesForUser } from '@/app/api/entity/list/route'
+import { getEntitiesForUser } from '@/lib/entity-list'
 
 // Helper to format a Team/UserTeam entity into a display object
 function formatEntity(e: {
@@ -550,7 +550,7 @@ export async function GET(req: NextRequest) {
         // So fromId is expected to match the rule's from-clause.
         // And `ticket:action:change:assigned:from:any:to:any`
         // So yes, fromId is the Entity ID of current assignee.
-        const currentEntityId = ticket.currentAssignedTo?.id ?? 0
+        const currentEntityId = ticket?.currentAssignedTo?.id ?? 0
         verifyChangePermission(access, ticketForPerm, 'assigned', currentEntityId, eId)
         validEntityIds.push(node.entityId)
       } catch { }
