@@ -9,8 +9,6 @@ export function verifyChangePermission(
   fromId: number | 'any',
   toId: number | 'any'
 ): void {
-  // console.log('=== verifyChangePermission DEBUG ===', { type, fromId, toId, actionPermissions: access.actionPermissions })
-
   for (const p of access.actionPermissions) {
     const parts = p.split(':')
 
@@ -34,8 +32,12 @@ export function verifyChangePermission(
         pScope = parts[7]
       }
 
-      if (pFrom !== 'any' && Number(pFrom) !== fromId) continue
-      if (pTo !== 'any' && Number(pTo) !== toId) continue
+      if (pFrom !== 'any' && Number(pFrom) !== fromId) {
+        continue
+      }
+      if (pTo !== 'any' && Number(pTo) !== toId) {
+        continue
+      }
 
       // If there is no context/scope (e.g. ticket:action:change:status:from:5:to:3),
       // it means this is an unconditional permission for this transition.
@@ -45,47 +47,35 @@ export function verifyChangePermission(
 
       for (const via of access.accessVia) {
 
-        if (pContext === 'assigned' && via.type === 'assignment' && (ticket.currentAssignedTo?.userTeamId !== undefined || ticket.currentAssignedTo?.teamId !== undefined)) {
-          if (
-            (via.userTeamId && via.userTeamId === ticket.currentAssignedTo.userTeamId) ||
-            (via.teamId && via.teamId === ticket.currentAssignedTo.teamId)
-          ) {
-            if (
-              pScope === 'any' ||
-              (pScope === 'team' && via.permission.endsWith(':team:any')) ||
-              (pScope === 'self' && via.permission.endsWith(':self'))
-            ) {
-              return // Authorized
-            }
+        // Check 'assigned' contest
+        if (pContext === 'assigned' && (ticket.currentAssignedTo?.userTeamId !== undefined || ticket.currentAssignedTo?.teamId !== undefined)) {
+          const assigned = ticket.currentAssignedTo
+
+          if (pScope === 'self') {
+            // Check if user is the assignee
+            if (via.userTeamId && via.userTeamId === assigned.userTeamId) return // Authorized
+          } else if (pScope === 'team') {
+            // Check if user's team is the assignee
+            if (via.teamId && via.teamId === assigned.teamId) return // Authorized
+          } else if (pScope === 'any') {
+            // Assigned to anyone
+            return // Authorized
           }
         }
-        if (pContext === 'createdby' && via.type === 'creation' && (ticket.createdBy?.userTeamId !== undefined || ticket.createdBy?.teamId !== undefined)) {
-          if (
-            (via.userTeamId && via.userTeamId === ticket.createdBy.userTeamId) ||
-            (via.teamId && via.teamId === ticket.createdBy.teamId)
-          ) {
-            if (
-              pScope === 'any' ||
-              (pScope === 'team' && via.permission.endsWith(':team:any')) ||
-              (pScope === 'self' && via.permission.endsWith(':self'))
-            ) {
-              return // Authorized
-            }
-          }
-        }
-        // For assignment changes, also allow if user has creation access and the permission allows it
-        if (type === 'assigned' && pContext === 'assigned' && via.type === 'creation' && (ticket.createdBy?.userTeamId !== undefined || ticket.createdBy?.teamId !== undefined)) {
-          if (
-            (via.userTeamId && via.userTeamId === ticket.createdBy.userTeamId) ||
-            (via.teamId && via.teamId === ticket.createdBy.teamId)
-          ) {
-            if (
-              pScope === 'any' ||
-              (pScope === 'team' && via.permission.endsWith(':team:any')) ||
-              (pScope === 'self' && via.permission.endsWith(':self'))
-            ) {
-              return // Authorized
-            }
+
+        // Check 'createdby' context - NOW SUPPORTED FOR ALL CHANGE TYPES INCLUDING ASSIGNED
+        if (pContext === 'createdby' && (ticket.createdBy?.userTeamId !== undefined || ticket.createdBy?.teamId !== undefined)) {
+          const created = ticket.createdBy
+
+          if (pScope === 'self') {
+            // Check if user is the creator
+            if (via.userTeamId && via.userTeamId === created.userTeamId) return // Authorized
+          } else if (pScope === 'team') {
+            // Check if user's team is the creator
+            if (via.teamId && via.teamId === created.teamId) return // Authorized
+          } else if (pScope === 'any') {
+            // Created by anyone (effectively always true if we are here and creator info exists)
+            return // Authorized
           }
         }
       }

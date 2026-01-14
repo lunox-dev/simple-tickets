@@ -5,25 +5,7 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma } from '@/lib/prisma'
 import { PermissionError, handlePermissionError } from '@/lib/permission-error'
 
-export async function GET(req: NextRequest) {
-  // 1) Authenticate (session or x-api-key)
-  const session = await getServerSession(authOptions)
-  let userId: number | null = null
-  let apiKeyPerms: string[] = []
-
-  if (session) {
-    userId = Number((session.user as any).id)
-  } else {
-    const key = req.headers.get('x-api-key')
-    if (!key) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const ak = await prisma.apiKey.findUnique({
-      where: { key },
-      select: { permissions: true }
-    })
-    if (!ak) return NextResponse.json({ error: 'Invalid API key' }, { status: 401 })
-    apiKeyPerms = ak.permissions
-  }
-
+export async function getEntitiesForUser(userId: number | null, apiKeyPerms: string[] = []) {
   // 2) Build permissions set
   const permSet = new Set(apiKeyPerms)
   if (userId !== null) {
@@ -37,7 +19,7 @@ export async function GET(req: NextRequest) {
         }
       }
     })
-    if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!me) throw new Error('Unauthorized')
     me.permissions.forEach(p => permSet.add(p))
     me.userTeams.forEach(ut => {
       ut.permissions.forEach(p => permSet.add(p))
@@ -46,26 +28,67 @@ export async function GET(req: NextRequest) {
   }
 
   const canAny = permSet.has('entity:list:any')
-  const canOwn = permSet.has('entity:list:own')
-  const canTeamAny = permSet.has('entity:list:team:any')
+  const canOwn = permSet.has('entity:list:own') // Legacy "Own + Related"
+  const canTeamAny = permSet.has('entity:list:team:any') || permSet.has('team:list')
 
-  if (!canAny && !canOwn && !canTeamAny) {
-    return handlePermissionError(new PermissionError('entity:list:any OR entity:list:own OR entity:list:team:any', 'entity'))
+  // New Granular Permissions
+  const canListUserAny = permSet.has('entity:list:user:any')
+  const canListUserOwn = permSet.has('entity:list:user:own')
+
+  const specificUserTeamIds = new Set<number>()
+  permSet.forEach(p => {
+    if (p.startsWith('entity:list:user:team:')) {
+      const parts = p.split(':')
+      if (parts.length === 5) {
+        const tid = Number(parts[4])
+        if (!isNaN(tid)) specificUserTeamIds.add(tid)
+      }
+    }
+  })
+
+  // Start with restrictive check. 
+  // If no global permissions, check if we have ANY granular permissions.
+  // Note: canTeamAny only grants TEAM visibility.
+  if (!canAny && !canOwn && !canTeamAny && !canListUserAny && !canListUserOwn && specificUserTeamIds.size === 0) {
+    throw new PermissionError('entity:list:any OR entity:list:own OR entity:list:team:any', 'entity')
   }
 
   // 3) Build filter
-  // If canAny, we want everything (no filter needed, unless we want to be explicit)
   let whereClause: any = {}
 
-  if (!canAny) {
+  if (!canAny && !canListUserAny) {
     const orConditions: any[] = []
 
-    // If canTeamAny, allow ALL teams
+    // -- TEAM VISIBILITY --
+    // If canAny (handled above) -> All.
+    // If canTeamAny -> All Teams.
     if (canTeamAny) {
       orConditions.push({ teamId: { not: null } })
     }
 
-    // If canOwn, allow related teams & users
+    // -- USER VISIBILITY --
+
+    // 1. Specific Teams' Users
+    if (specificUserTeamIds.size > 0) {
+      orConditions.push({ userTeam: { teamId: { in: Array.from(specificUserTeamIds) } } })
+    }
+
+    // 2. Own Team Users (Strict)
+    if (canListUserOwn && userId !== null) {
+      const ownTeams = await prisma.userTeam.findMany({
+        where: { userId, Active: true },
+        select: { teamId: true }
+      })
+      const ownTeamIds = ownTeams.map(r => r.teamId)
+      orConditions.push({ userTeam: { teamId: { in: ownTeamIds } } })
+    }
+
+    // 3. Legacy "Own" (Own + Related) - Applies to both Teams and Users if strict flags aren't used?
+    // User requested explicit separate logic.
+    // If we rely purely on new flags for users, we might ignore canOwn for users.
+    // But to maintain backward compatibility, `canOwn` should probably still work?
+    // The user's new requirements seem to supersede "related" logic for USER visibility.
+    // But "canOwn" was "related teams".
     if (canOwn && userId !== null) {
       const ownTeams = await prisma.userTeam.findMany({
         where: { userId, Active: true },
@@ -82,6 +105,13 @@ export async function GET(req: NextRequest) {
       })).map(r => r.teamId)
       const allTeamIds = Array.from(new Set([...ownTeamIds, ...related]))
 
+      // canOwn grants visibility to TEAMS and USERS of related teams?
+      // Based on previous code: Yes.
+      // But user wants to restrict GIC from seeing ICTA users even if related.
+      // So effectively, for the new Roles, we should NOT give them `entity:list:own`.
+      // We should give them `entity:list:team:any` + `entity:list:user:own` (strict).
+      // So this block is fine to stay for legacy/other roles, but we won't assign `entity:list:own` to GIC.
+
       orConditions.push({ teamId: { in: allTeamIds } })
       orConditions.push({ userTeam: { teamId: { in: allTeamIds } } })
     }
@@ -89,8 +119,6 @@ export async function GET(req: NextRequest) {
     if (orConditions.length > 0) {
       whereClause = { OR: orConditions }
     } else {
-      // Should technically be caught by the permission check above, but as a fallback:
-      // explicitly match nothing if we got here with no valid OR conditions
       whereClause = { id: -1 }
     }
   }
@@ -141,5 +169,32 @@ export async function GET(req: NextRequest) {
     a.priority - b.priority || a.name.localeCompare(b.name)
   )
 
-  return NextResponse.json(tree)
+  return tree
+}
+
+export async function GET(req: NextRequest) {
+  // 1) Authenticate (session or x-api-key)
+  const session = await getServerSession(authOptions)
+  let userId: number | null = null
+  let apiKeyPerms: string[] = []
+
+  if (session) {
+    userId = Number((session.user as any).id)
+  } else {
+    const key = req.headers.get('x-api-key')
+    if (!key) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const ak = await prisma.apiKey.findUnique({
+      where: { key },
+      select: { permissions: true }
+    })
+    if (!ak) return NextResponse.json({ error: 'Invalid API key' }, { status: 401 })
+    apiKeyPerms = ak.permissions
+  }
+
+  try {
+    const tree = await getEntitiesForUser(userId, apiKeyPerms)
+    return NextResponse.json(tree)
+  } catch (err) {
+    return handlePermissionError(err)
+  }
 }

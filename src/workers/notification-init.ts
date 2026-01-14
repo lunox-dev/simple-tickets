@@ -11,7 +11,7 @@ const connection = new IORedis(process.env.REDIS_URL as string, {
 })
 export const notificationQueue = new Queue('notifications', { connection })
 
-new Worker(
+const worker = new Worker(
   'notifications',
   async job => {
     if (job.name !== 'notification-init') return
@@ -23,10 +23,10 @@ new Worker(
         where: { id: eventId },
         include: {
           onAssignmentChange: { select: { ticketId: true } },
-          onPriorityChange:   { select: { ticketId: true } },
-          onStatusChange:     { select: { ticketId: true } },
-          onCategoryChange:   { select: { ticketId: true } },
-          onThread:           { select: { ticketId: true, id: true } },
+          onPriorityChange: { select: { ticketId: true } },
+          onStatusChange: { select: { ticketId: true } },
+          onCategoryChange: { select: { ticketId: true } },
+          onThread: { select: { ticketId: true, id: true } },
         }
       })
       if (!event) throw new Error(`Event ${eventId} not found`)
@@ -67,7 +67,7 @@ new Worker(
         await prisma.notificationRecipient.createMany({
           data: users.map(u => ({
             eventId: event.id,
-            userId:  u.userId,
+            userId: u.userId,
           })),
           skipDuplicates: true,
         })
@@ -79,7 +79,29 @@ new Worker(
       console.log(`[notification-init] ${users.length} recipients created for event ${eventId} on ticket ${ticketId}`)
     } catch (err) {
       console.error(`[notification-init] error processing job for event ${eventId}:`, err)
+      throw err // Rethrow to mark job as failed
     }
   },
   { connection }
 )
+
+worker.on('ready', () => {
+  console.log('[notification-init] Worker connected and ready!')
+})
+
+worker.on('active', job => {
+  console.log(`[notification-init] Job ${job.id} started (name: ${job.name})`)
+})
+
+worker.on('completed', job => {
+  console.log(`[notification-init] Job ${job.id} completed`)
+})
+
+worker.on('failed', (job, err) => {
+  console.error(`[notification-init] Job ${job?.id} failed:`, err)
+})
+
+worker.on('error', err => {
+  console.error(`[notification-init] Worker error:`, err)
+})
+

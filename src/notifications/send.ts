@@ -71,7 +71,10 @@ export async function sendSMS(to: string, text: string) {
     const responseBody = await response.text()
     console.log(`[sendSMS] SMS response status: ${response.status}, body:`, responseBody)
     return responseBody
-  } catch (err) {
+  } catch (err: any) {
+    if (err.code === 'UND_ERR_CONNECT_TIMEOUT' || err.cause?.code === 'UND_ERR_CONNECT_TIMEOUT') {
+      console.error(`[sendSMS] Connection timeout to SMS gateway (${process.env.SMS_HOST}). Are you connected to the VPN?`)
+    }
     console.error(`[sendSMS] Error sending SMS:`, err)
     throw err
   }

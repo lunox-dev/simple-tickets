@@ -28,8 +28,22 @@ export async function POST(req: NextRequest) {
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
     include: {
-      currentAssignedTo: { select: { id: true, userTeamId: true, teamId: true } },
-      createdBy: { select: { id: true, userTeamId: true, teamId: true } }
+      currentAssignedTo: {
+        select: {
+          id: true,
+          userTeamId: true,
+          teamId: true,
+          userTeam: { select: { teamId: true } }
+        }
+      },
+      createdBy: {
+        select: {
+          id: true,
+          userTeamId: true,
+          teamId: true,
+          userTeam: { select: { teamId: true } }
+        }
+      }
     }
   })
   if (!ticket) {
@@ -41,21 +55,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Priority not found' }, { status: 404 })
   }
 
-  // Convert nulls to undefined for type compatibility
+  // Convert nulls to undefined for type compatibility and patch teamId
   const safeTicket = {
     ...ticket,
     currentAssignedTo: ticket.currentAssignedTo
       ? {
         ...ticket.currentAssignedTo,
         userTeamId: ticket.currentAssignedTo.userTeamId ?? undefined,
-        teamId: ticket.currentAssignedTo.teamId ?? undefined,
+        teamId: (ticket.currentAssignedTo.teamId ?? ticket.currentAssignedTo.userTeam?.teamId) ?? undefined,
       }
       : undefined,
     createdBy: ticket.createdBy
       ? {
         ...ticket.createdBy,
         userTeamId: ticket.createdBy.userTeamId ?? undefined,
-        teamId: ticket.createdBy.teamId ?? undefined,
+        teamId: (ticket.createdBy.teamId ?? ticket.createdBy.userTeam?.teamId) ?? undefined,
       }
       : undefined,
   }

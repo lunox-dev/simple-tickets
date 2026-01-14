@@ -33,10 +33,17 @@ export async function POST(req: NextRequest) {
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
-    select: { currentAssignedTo: { select: { id: true } } }
+    select: {
+      currentStatusId: true,
+      currentAssignedTo: { select: { id: true } }
+    }
   })
   if (!ticket) {
     return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+  }
+
+  if (ticket.currentStatusId === 4) {
+    return NextResponse.json({ error: 'Cannot add thread to a closed ticket' }, { status: 400 })
   }
 
   try {

@@ -96,18 +96,34 @@ interface SidebarProps {
     permissions: string[]
     teams: { id: number; teamId: number }[]
   }
+  meta: {
+    statuses: Status[]
+    priorities: Priority[]
+    categories: { id: number; name: string; parentId: number | null; childDropdownLabel?: string | null }[]
+    categoryTree: Category[]
+    entities: Entity[]
+  }
+  allowedActions: {
+    allowedStatuses: number[]
+    allowedPriorities: number[]
+    allowedCategories: number[]
+    allowedAssignees: string[]
+    canClaim: boolean
+  }
   onTicketUpdate: () => void
   onClose?: () => void
 }
 
-export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }: SidebarProps) {
-  const [priorities, setPriorities] = useState<Priority[]>([])
-  const [statuses, setStatuses] = useState<Status[]>([])
-  const [categories, setCategories] = useState<Category[]>([])
-  const [flatCategories, setFlatCategories] = useState<FlatCategory[]>([])
-  const [entities, setEntities] = useState<Entity[]>([])
-  const [flatEntities, setFlatEntities] = useState<FlatEntity[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+export default function TicketSidebar({ ticket, user, meta, allowedActions, onTicketUpdate, onClose }: SidebarProps) {
+  // Derive state from props
+  const priorities = meta.priorities
+  const statuses = meta.statuses
+  // Categories from tree
+  // Ideally we type cast meta.categoryTree
+  const categories = meta.categoryTree as Category[]
+  const entities = meta.entities
+
+  const [isLoading, setIsLoading] = useState(false) // No longer loading initial data
   const [isUpdating, setIsUpdating] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [assignOpen, setAssignOpen] = useState(false)
@@ -176,188 +192,37 @@ export default function TicketSidebar({ ticket, user, onTicketUpdate, onClose }:
     return result
   }
 
-  useEffect(() => {
-    const fetchReferenceData = async () => {
-      try {
-        const [priRes, statRes, catRes, entRes] = await Promise.all([
-          fetch("/api/ticket/priority/list"),
-          fetch("/api/ticket/status/list"),
-          fetch("/api/ticket/category/list"),
-          fetch("/api/entity/list"),
-        ])
-
-        if (priRes.ok) {
-          const priData = await priRes.json()
-          setPriorities(priData.priorities || priData)
-        }
-        if (statRes.ok) {
-          const statData = await statRes.json()
-          setStatuses(statData)
-        }
-        if (catRes.ok) {
-          const catData = await catRes.json()
-          setCategories(catData)
-          setFlatCategories(flattenCategories(catData))
-        }
-        if (entRes.ok) {
-          const entData = await entRes.json()
-          setEntities(entData)
-          setFlatEntities(flattenEntities(entData))
-        }
-      } catch (err) {
-        console.warn("Failed to fetch reference data:", err)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    fetchReferenceData()
-  }, [])
-
-  // Helper to validate scope/context against the ticket and user
-  const checkScope = (context: string, scope: string) => {
-    if (scope === "any") return true
-
-    if (context === "assigned") {
-      const assigned = ticket.currentAssignedTo
-      if (!assigned) return false
-
-      if (scope === "team") {
-        if (!assigned.teamId) return false
-        return user.teams.some(t => t.teamId === assigned.teamId)
-      }
-
-      if (scope === "team:unclaimed") {
-        if (!assigned.teamId) return false
-        if (assigned.userTeamId) return false // It IS claimed
-        return user.teams.some(t => t.teamId === assigned.teamId)
-      }
-
-      if (scope === "self") {
-        if (!assigned.userTeamId) return false
-        return user.teams.some(t => t.id === assigned.userTeamId)
-      }
-    }
-
-    if (context === "createdby") {
-      const creator = ticket.createdBy
-      if (!creator) return false
-
-      // 'team' scope for createdby means created by someone in my team
-      if (scope === "team") {
-        if (!creator.teamId) return false
-        return user.teams.some(t => t.teamId === creator.teamId)
-      }
-
-      if (scope === "self") {
-        if (!creator.userTeamId) return false
-        return user.teams.some(t => t.id === creator.userTeamId)
-      }
-    }
-
-    return false
-  }
+  const flatCategories = useMemo(() => flattenCategories(categories), [categories])
+  const flatEntities = useMemo(() => flattenEntities(entities), [entities])
 
   const canChangeStatus = (toStatusId?: number): boolean => {
-    const currentStatusId = ticket.currentStatus.id
-
-    return user.permissions.some((permission) => {
-      if (!permission.startsWith("ticket:action:change:status:")) return false
-
-      const parts = permission.split(":")
-      if (parts.length < 10) return false
-
-      const fromStatus = parts[5]
-      const toStatus = parts[7]
-      const context = parts[8] // assigned / createdby
-      const scope = parts[9]   // self / team / any
-
-      if (fromStatus !== "any" && Number.parseInt(fromStatus) !== currentStatusId) return false
-      if (toStatusId && toStatus !== "any" && Number.parseInt(toStatus) !== toStatusId) return false
-
-      return checkScope(context, scope)
-    })
+    if (toStatusId) {
+      return allowedActions.allowedStatuses.includes(toStatusId)
+    }
+    return allowedActions.allowedStatuses.length > 0
   }
 
   const canChangePriority = (toPriorityId?: number): boolean => {
-    const currentPriorityId = ticket.currentPriority.id
-
-    return user.permissions.some((permission) => {
-      if (!permission.startsWith("ticket:action:change:priority:")) return false
-
-      const parts = permission.split(":")
-      if (parts.length < 10) return false
-
-      const fromPriority = parts[5]
-      const toPriority = parts[7]
-      const context = parts[8]
-      const scope = parts[9]
-
-      if (fromPriority !== "any" && Number.parseInt(fromPriority) !== currentPriorityId) return false
-      if (toPriorityId && toPriority !== "any" && Number.parseInt(toPriority) !== toPriorityId) return false
-
-      return checkScope(context, scope)
-    })
+    if (toPriorityId) {
+      return allowedActions.allowedPriorities.includes(toPriorityId)
+    }
+    return allowedActions.allowedPriorities.length > 0
   }
 
   const canChangeCategory = (toCategoryId?: number): boolean => {
-    const currentCategoryId = ticket.currentCategory.id
-
-    return user.permissions.some((permission) => {
-      if (!permission.startsWith("ticket:action:change:category:")) return false
-
-      const parts = permission.split(":")
-      if (parts.length < 10) return false
-
-      const fromCategory = parts[5]
-      const toCategory = parts[7]
-      const context = parts[8]
-      const scope = parts[9]
-
-      if (fromCategory !== "any" && Number.parseInt(fromCategory) !== currentCategoryId) return false
-      if (toCategoryId && toCategory !== "any" && Number.parseInt(toCategory) !== toCategoryId) return false
-
-      return checkScope(context, scope)
-    })
+    if (toCategoryId) {
+      return allowedActions.allowedCategories.includes(toCategoryId)
+    }
+    return allowedActions.allowedCategories.length > 0
   }
 
   const canChangeAssignment = (): boolean => {
-    return user.permissions.some((permission) => {
-      if (!permission.startsWith("ticket:action:change:assigned:")) return false
-      const parts = permission.split(":")
-      if (parts.length < 5) return false
-
-      // format: ticket:action:change:assigned:from:any:to:any:assigned:any
-      // context is index 8, scope is index 9
-      if (parts.length >= 10) {
-        const fromEntity = parts[5]
-        // we don't strictly check 'fromEntity' here usually, but we could.
-        const context = parts[8]
-        const scope = parts[9]
-        return checkScope(context, scope)
-      } else {
-        // legacy or short format fallback? usually it's full format.
-        // But logic in original code checked index 4 for scope... which was wrong for the full format!
-        // If it IS "ticket:action:change:assigned:any" (short format), scope is 4.
-        // But standards doc says: ticket:action:change:assigned:from:any:to:any:assigned:any
-        return false
-      }
-    })
+    // If there are allowed assignees, we can assign (assuming we can assign to those specific ones)
+    return allowedActions.allowedAssignees.length > 0
   }
 
   const canClaimTicket = (): boolean => {
-    if (!ticket.currentAssignedTo) return false
-
-    return user.permissions.some((permission) => {
-      if (!permission.startsWith("ticket:action:claim:")) return false
-      const parts = permission.split(":")
-      if (parts.length < 4) return false
-      const scope = parts[3]
-
-      // ticket:action:claim:any or ticket:action:claim:team:unclaimed
-      // Context is implicitly "assigned" for claiming check
-
-      return checkScope("assigned", scope)
-    })
+    return allowedActions.canClaim
   }
 
   const handleStatusChange = async (statusId: string) => {
