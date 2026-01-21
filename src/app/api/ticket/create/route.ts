@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 
 import { enqueueNotificationInit } from '@/lib/notification-queue'
 import { verifyPermission, handlePermissionError } from '@/lib/permission-error'
+import { getAccessibleCategoryIds } from '@/lib/access-ticket-category'
 
 type FieldPayload = {
   fieldDefinitionId: number
@@ -140,6 +141,14 @@ export async function POST(req: NextRequest) {
   }
   if (attachments !== undefined && !Array.isArray(attachments)) {
     return NextResponse.json({ error: 'attachments must be an array' }, { status: 400 })
+  }
+
+  // ─── category permission check ───────────────────────────────────────────────
+  if (session) {
+    const allowedCats = await getAccessibleCategoryIds(session.user)
+    if (!allowedCats.has(category!)) {
+      return NextResponse.json({ error: 'You are not allowed to create tickets in this category' }, { status: 403 })
+    }
   }
   const fieldArr = Array.isArray(fields) ? fields : []
   if (fieldArr.some(f =>

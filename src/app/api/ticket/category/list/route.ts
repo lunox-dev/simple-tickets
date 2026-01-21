@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma } from '@/lib/prisma'
 import { PermissionError, handlePermissionError } from '@/lib/permission-error'
+import { getAccessibleCategoryIds } from '@/lib/access-ticket-category'
 
 export async function GET(req: NextRequest) {
   // 1. Authenticate
@@ -32,47 +33,17 @@ export async function GET(req: NextRequest) {
     return handlePermissionError(new PermissionError('ticketcategory:view:any OR ticketcategory:view:own', 'ticket_category'))
   }
 
-  // 3. Fetch all categories (we'll filter down if needed)
+  // 3. Get accessible IDs using shared helper
+  const accessibleIds = await getAccessibleCategoryIds(session.user)
+
+  // 4. Fetch all categories and filter
   const allCats = await prisma.ticketCategory.findMany({
     select: { id: true, name: true, childDropdownLabel: true, parentId: true, priority: true },
     orderBy: { priority: 'asc' }
   })
 
-  let cats = allCats
-
-  // 4. If only "own", expand allowed roots to include all their descendants
-  if (!canViewAny) {
-    // a) get the categories user has direct access to
-    const teamIds = userTeams.map(t => t.teamId).filter(id => id !== undefined && id !== null)
-    const allowedRoots = await prisma.ticketCategoryAvailabilityTeam.findMany({
-      where: { teamId: { in: teamIds } },
-      select: { ticketCategoryId: true }
-    })
-    const allowedSet = new Set<number>(allowedRoots.map(r => r.ticketCategoryId))
-
-    // b) build parent→children map for all categories
-    const childrenMap: Record<number, number[]> = {}
-    allCats.forEach(c => {
-      const pid = c.parentId ?? 0
-        ; (childrenMap[pid] ||= []).push(c.id)
-    })
-
-    // c) DFS to include all descendants
-    const stack = [...allowedSet]
-    while (stack.length) {
-      const cur = stack.pop()!
-      const kids = childrenMap[cur] || []
-      for (const childId of kids) {
-        if (!allowedSet.has(childId)) {
-          allowedSet.add(childId)
-          stack.push(childId)
-        }
-      }
-    }
-
-    // d) filter categories
-    cats = allCats.filter(c => allowedSet.has(c.id))
-  }
+  // Filter based on accessibility
+  const cats = allCats.filter(c => accessibleIds.has(c.id))
 
   // 5. Assemble tree from cats
   const nodeMap: Record<number, any> = {}

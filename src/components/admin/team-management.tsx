@@ -19,7 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, Plus, AlertCircle, Edit, GripVertical } from "lucide-react"
+import { Loader2, Plus, AlertCircle, Edit, GripVertical, ListChecks } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 
 interface Team {
@@ -246,6 +246,58 @@ export default function TeamManagement() {
     }
   }
 
+  // Category Management Handlers
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
+  const [managingTeam, setManagingTeam] = useState<Team | null>(null)
+  const [allCategories, setAllCategories] = useState<any[]>([])
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([])
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false)
+  const [isSavingCategories, setIsSavingCategories] = useState(false)
+
+  const handleManageCategories = async (team: Team) => {
+    setManagingTeam(team)
+    setCategoryDialogOpen(true)
+    setIsLoadingCategories(true)
+    setAllCategories([])
+    setSelectedCategoryIds([])
+
+    try {
+      const res = await fetch(`/api/team/category-access?teamId=${team.id}`)
+      if (!res.ok) throw new Error('Failed to fetch categories')
+      const data = await res.json()
+      setAllCategories(data.allCategories || [])
+      setSelectedCategoryIds(data.allowedIds || [])
+    } catch (err) {
+      setError('Failed to load category data')
+      setCategoryDialogOpen(false)
+    } finally {
+      setIsLoadingCategories(false)
+    }
+  }
+
+  const handleSaveCategories = async () => {
+    if (!managingTeam) return
+    setIsSavingCategories(true)
+    try {
+      const res = await fetch('/api/team/category-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teamId: managingTeam.id,
+          categoryIds: selectedCategoryIds
+        })
+      })
+      if (!res.ok) throw new Error('Failed to save categories')
+
+      setSuccess(`Updated category access for ${managingTeam.name}`)
+      setCategoryDialogOpen(false)
+    } catch (err) {
+      setError('Failed to save category access')
+    } finally {
+      setIsSavingCategories(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -384,14 +436,16 @@ export default function TeamManagement() {
                     </TableCell>
                     <TableCell>
                       <span
-                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          team.Active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                        }`}
+                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${team.Active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                          }`}
                       >
                         {team.Active ? "Active" : "Inactive"}
                       </span>
                     </TableCell>
                     <TableCell>
+                      <Button variant="ghost" size="sm" onClick={() => handleManageCategories(team)} title="Manage Categories">
+                        <ListChecks className="h-4 w-4" />
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => openEditDialog(team)}>
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -447,6 +501,61 @@ export default function TeamManagement() {
             <Button onClick={handleEditTeam} disabled={isEditingTeam}>
               {isEditingTeam && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Update Team
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Category Management Dialog */}
+      <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Manage Category Access</DialogTitle>
+            <DialogDescription>
+              Select which ticket categories {managingTeam?.name} can access.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            {isLoadingCategories ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            ) : (
+              <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
+                {allCategories.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center">No categories found.</p>
+                ) : (
+                  allCategories.map(cat => (
+                    <div key={cat.id} className="flex items-center space-x-2 border p-2 rounded hover:bg-muted/50">
+                      <input
+                        type="checkbox"
+                        id={`cat-${cat.id}`}
+                        className="h-4 w-4 rounded border-gray-300"
+                        checked={selectedCategoryIds.includes(cat.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedCategoryIds(prev => [...prev, cat.id])
+                          } else {
+                            setSelectedCategoryIds(prev => prev.filter(id => id !== cat.id))
+                          }
+                        }}
+                      />
+                      <div className="flex flex-col">
+                        <label htmlFor={`cat-${cat.id}`} className="text-sm font-medium cursor-pointer">
+                          {cat.name}
+                        </label>
+                        {cat.parentId && <span className="text-xs text-muted-foreground">Sub-category (ID: {cat.id})</span>}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCategoryDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveCategories} disabled={isSavingCategories || isLoadingCategories}>
+              {isSavingCategories && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>
