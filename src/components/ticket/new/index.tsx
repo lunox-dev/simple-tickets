@@ -791,14 +791,23 @@ export default function NewTicketForm() {
                           </span>
                         </SelectTrigger>
                         <SelectContent>
-                          {statuses.map((status) => (
-                            <SelectItem key={status.id} value={status.id.toString()}>
-                              <div className="flex items-center gap-2">
-                                <div className="h-2 w-2 rounded-full" style={{ backgroundColor: status.color }} />
-                                {status.name}
-                              </div>
-                            </SelectItem>
-                          ))}
+                          {statuses
+                            .filter((status) => {
+                              // Filter based on permissions
+                              if (!session?.user) return false;
+                              const perms = (session.user as any).permissions || [];
+                              const hasAny = perms.includes('ticket:create:status:any');
+                              const hasSpecific = perms.includes(`ticket:create:status:${status.id}`);
+                              return hasAny || hasSpecific;
+                            })
+                            .map((status) => (
+                              <SelectItem key={status.id} value={status.id.toString()}>
+                                <div className="flex items-center gap-2">
+                                  <div className="h-2 w-2 rounded-full" style={{ backgroundColor: status.color }} />
+                                  {status.name}
+                                </div>
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>

@@ -139,6 +139,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `${key} (numeric ID) is required` }, { status: 400 })
     }
   }
+
+  // ─── status permission check ────────────────────────────────────────────────
+  const canCreateStatusAny = permSet.has('ticket:create:status:any')
+  const canCreateStatusSpecific = permSet.has(`ticket:create:status:${status}`)
+
+  if (!canCreateStatusAny && !canCreateStatusSpecific) {
+    return NextResponse.json({ error: 'You are not allowed to create tickets with this status' }, { status: 403 })
+  }
+
   if (attachments !== undefined && !Array.isArray(attachments)) {
     return NextResponse.json({ error: 'attachments must be an array' }, { status: 400 })
   }

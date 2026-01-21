@@ -561,62 +561,52 @@ export async function GET(req: NextRequest) {
   traverse(entityTree)
 
   // Can Claim?
-  let canClaim = false
-  if (ticket.currentAssignedTo) {
-    // Claim means assigning to start working on it.
-    // Usually means changing assignment from "Team (Unassigned)" to "Me (UserTeam)".
-    // The specific permission ticket:action:claim check is handled in `verifyTicketAccess` or custom logic?
-    // In `verifyChangePermission` there is a block: } else if (parts[2] === 'claim' && type === 'assigned') {
-    // It checks if we are assigning to self.
-    // So "Can Claim" is basically: Can I assign this ticket to MYSELF?
-    // We can check if any of the user's MyUserTeam IDs are in the validEntityIds list.
-    // But `validEntityIds` are Entity IDs (UserTeam.entityId or Team.entityId).
-    // We need to know the Entity ID of the current user's UserTeams.
-    // We fetched userTeams at the top: `select: { id: true, teamId: true }`.
-    // We didn't fetch their Entity ID.
-    // Let's resolve that.
-  }
+  let claimType: 'CLAIM' | 'FORCE_CLAIM' | null = null
 
-  // To check if "claim" is allowed, we specifically look for 'ticket:action:claim:*' permissions
-  // OR just rely on normal assignment rules being able to assign to self.
-  // The frontend currently has `canClaimTicket` logic which looks for `ticket:action:claim:...`.
-  // Let's replicate strict claim permission check.
-  try {
-    // verifyChangePermission handles 'claim' logic if we pass type='assigned' and check specific claim rules?
-    // Actually `verifyChangePermission` has a special block for 'claim'.
-    // `else if (parts[2] === 'claim' && type === 'assigned')`
-    // It triggers if we iterate permissions and find a claim rule.
-    // It verifies if `fromId` is unassigned (0 or 'any') and `toId` is self.
-    // So to check if "Claim button" should be enabled, we assume user wants to assign to self.
-    // We don't know which UserTeam they will use (if they have multiple).
-    // But if ANY of their UserTeams is a valid target, then yes.
-    // OR we just check if they have the claim permission valid for this ticket.
-    // Simplest: Check if `ticket:action:claim:...` perms exist and match scope.
-    const claimPerms = allPermissions.filter(p => p.startsWith('ticket:action:claim:'))
-    if (claimPerms.length > 0) {
-      // Just basic check as per frontend logic:
-      // ticket:action:claim:any or ticket:action:claim:team:unclaimed
-      // and checking scope against ticket state.
-      // We can interpret this here or just pass the boolean.
-      // Let's try to interpret "Can I claim this?"
-      // Claiming is only valid if currently assigned to a Team but NOT a user (Unclaimed).
-      const isUnclaimed = ticket.currentAssignedTo?.teamId && !ticket.currentAssignedTo.userTeamId
-      if (isUnclaimed) {
-        // Check scopes
-        canClaim = claimPerms.some(p => {
-          const parts = p.split(':')
-          const scope = parts[3]
-          // Scope: any, team:unclaimed (which implies team check)
-          if (scope === 'any') return true
-          if (scope === 'team:unclaimed') {
-            // Must be assigned to one of my teams
-            return userTeams.some(ut => ut.teamId === ticket.currentAssignedTo?.teamId)
-          }
-          return false
-        })
+  if (ticket.currentAssignedTo) {
+    // Logic copied from /api/ticket/claim/route.ts
+    // 1. ticket:action:claim:any:force 
+    // 2. ticket:action:claim:any:unclaimed
+    // 3. ticket:action:claim:team:force
+    // 4. ticket:action:claim:team:unclaimed
+
+    const isUnclaimed = !ticket.currentAssignedTo || (!!ticket.currentAssignedTo.teamId && !ticket.currentAssignedTo.userTeamId)
+
+    // Check user teams
+    const myTeamIds = new Set(userTeams.map(t => t.teamId))
+    const isAssignedToMyTeam = ticket.currentAssignedTo?.teamId ? myTeamIds.has(ticket.currentAssignedTo.teamId) : false
+
+    // Check if assigned to SELF
+    // ticket.currentAssignedTo.userTeamId must match one of my userTeamIds
+    const myUserTeamIds = new Set(userTeams.map(t => t.id))
+    const isAssignedToMe = ticket.currentAssignedTo.userTeamId ? myUserTeamIds.has(ticket.currentAssignedTo.userTeamId) : false
+
+    if (!isAssignedToMe) {
+      // Permission Checks
+      let hasPermission = false
+      const perms = new Set(allPermissions)
+
+      if (perms.has('ticket:action:claim:any:force')) {
+        hasPermission = true
+      } else if (perms.has('ticket:action:claim:any:unclaimed') && isUnclaimed) {
+        hasPermission = true
+      } else if (perms.has('ticket:action:claim:team:force') && isAssignedToMyTeam) {
+        hasPermission = true
+      } else if (perms.has('ticket:action:claim:team:unclaimed') && isAssignedToMyTeam && isUnclaimed) {
+        hasPermission = true
+      }
+
+      if (hasPermission) {
+        // Determine Type
+        // If currently assigned to a user (and not me, verified above), it is FORCE_CLAIM
+        if (ticket.currentAssignedTo.userTeamId) {
+          claimType = 'FORCE_CLAIM'
+        } else {
+          claimType = 'CLAIM'
+        }
       }
     }
-  } catch { }
+  }
 
   // Can Reply?
   // 1. Ticket must not be Closed (4)
@@ -666,7 +656,7 @@ export async function GET(req: NextRequest) {
       allowedPriorities,
       allowedCategories,
       allowedAssignees: validEntityIds,
-      canClaim,
+      claimType,
       canReply
     }
   })

@@ -89,6 +89,14 @@ interface FlatEntity {
   level: number
 }
 
+interface AllowedActions {
+  allowedStatuses: number[]
+  allowedPriorities: number[]
+  allowedCategories: number[]
+  allowedAssignees: string[]
+  claimType: 'CLAIM' | 'FORCE_CLAIM' | null
+}
+
 interface SidebarProps {
   ticket: TicketData
   user: {
@@ -103,13 +111,7 @@ interface SidebarProps {
     categoryTree: Category[]
     entities: Entity[]
   }
-  allowedActions: {
-    allowedStatuses: number[]
-    allowedPriorities: number[]
-    allowedCategories: number[]
-    allowedAssignees: string[]
-    canClaim: boolean
-  }
+  allowedActions: AllowedActions
   onTicketUpdate: () => void
   onClose?: () => void
 }
@@ -222,7 +224,12 @@ export default function TicketSidebar({ ticket, user, meta, allowedActions, onTi
   }
 
   const canClaimTicket = (): boolean => {
-    return allowedActions.canClaim
+    return !!allowedActions.claimType
+  }
+
+  const getClaimLabel = () => {
+    if (allowedActions.claimType === 'FORCE_CLAIM') return 'Force Claim'
+    return 'Claim Ticket'
   }
 
   const handleStatusChange = async (statusId: string) => {
@@ -611,10 +618,12 @@ export default function TicketSidebar({ ticket, user, meta, allowedActions, onTi
               </div>
             )}
 
+
+
             {/* Claim Button */}
-            {canClaimTicket() && ticket.currentAssignedTo && (
+            {allowedActions.claimType && ticket.currentAssignedTo && (
               <Button
-                variant="secondary"
+                variant={allowedActions.claimType === 'FORCE_CLAIM' ? "destructive" : "secondary"}
                 size="sm"
                 onClick={handleClaimTicket}
                 disabled={isUpdating === "claim"}
@@ -625,7 +634,7 @@ export default function TicketSidebar({ ticket, user, meta, allowedActions, onTi
                 ) : (
                   <UserPlus className="h-3 w-3 mr-2" />
                 )}
-                Claim this Ticket
+                {getClaimLabel()}
               </Button>
             )}
           </div>
