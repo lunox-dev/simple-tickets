@@ -73,7 +73,7 @@ interface TicketViewData {
     allowedPriorities: number[]
     allowedCategories: number[]
     allowedAssignees: string[]
-    canClaim: boolean
+    claimType: 'CLAIM' | 'FORCE_CLAIM' | null
     canReply: boolean
   }
 }
