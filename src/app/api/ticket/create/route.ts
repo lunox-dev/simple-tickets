@@ -55,14 +55,18 @@ export async function POST(req: NextRequest) {
     }
 
     const user = session.user as any
-    const selectedUT = user.actionUserTeamId
-    if (!selectedUT) {
+    const actingAs = user.actingAs as
+      | { userTeamId: number; userTeamEntityId: number; teamName: string }
+      | undefined
+
+    if (!actingAs) {
       return NextResponse.json({ error: 'No active UserTeam selected' }, { status: 400 })
     }
 
-    const actingUT = (user.teams as any[]).find((t: any) => t.userTeamId === selectedUT)
+    const actingUT = (user.teams as any[]).find((t: any) => t.userTeamId === actingAs.userTeamId)
     if (!actingUT) {
-      return NextResponse.json({ error: 'Selected UserTeam not found' }, { status: 400 })
+      // Should not happen if session consistency is maintained, but safe check
+      return NextResponse.json({ error: 'Selected UserTeam not found in user teams' }, { status: 400 })
     }
 
     // collect permissions
@@ -78,10 +82,6 @@ export async function POST(req: NextRequest) {
     }
 
     // ensure the provided entity matches your current actingAs entity
-    const actingAs = user.actingAs as
-      | { userTeamId: number; userTeamEntityId: number; teamName: string }
-      | undefined
-
     if (!actingAs || userTeamEntityId !== actingAs.userTeamEntityId) {
       return NextResponse.json({
         error: `userTeamEntityId=${userTeamEntityId} is not your current acting entity`
