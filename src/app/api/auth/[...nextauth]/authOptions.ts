@@ -112,6 +112,26 @@ export const authOptions: NextAuthOptions = {
           userTeamEntityId: entity.id,
           teamName: atu.team.name,
         }
+      } else if (teams.length > 0) {
+        // Default to the first team if no action team is selected OR selected one is inactive
+        const defaultTeam = teams[0]
+        // We need to resolve the entity ID for this default team.
+        // It should be in the `teams` array already as we populated it above.
+        let entityId = defaultTeam.entityId
+
+        if (!entityId) {
+          // Just in case entity didn't exist for that userTeam (logic above creates/cleans it though)
+          const freshEnt = await prisma.entity.create({ data: { userTeamId: defaultTeam.userTeamId } })
+          entityId = freshEnt.id
+        }
+
+        actingAs = {
+          userTeamId: defaultTeam.userTeamId,
+          userTeamEntityId: entityId,
+          teamName: defaultTeam.name
+        }
+        // Ideally we should also update the user's preference in DB so next time it's faster?
+        // But for now, just fixing the session is enough to unblock.
       }
 
       session.user = {

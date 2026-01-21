@@ -96,23 +96,26 @@ export async function getTicketAccessForUser(
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
     select: {
-      currentAssignedTo: { select: { teamId: true, userTeamId: true } },
-      createdBy: { select: { teamId: true, userTeamId: true } }
+      currentAssignedTo: { select: { teamId: true, userTeamId: true, userTeam: { select: { teamId: true } } } },
+      createdBy: { select: { teamId: true, userTeamId: true, userTeam: { select: { teamId: true } } } }
     }
   })
   if (!ticket) return null
 
   // 5) evaluate which rules grant read access
   const via: AccessVia[] = []
+
   for (const r of rules) {
     const { type, permission, teamId, userTeamId, from } = r
 
     if (type === 'assignment' && ticket.currentAssignedTo) {
       const a = ticket.currentAssignedTo
+      const assignedTeamId = a.teamId ?? a.userTeam?.teamId
+
       if (
         permission === 'ticket:read:assigned:any' ||
-        (permission === 'ticket:read:assigned:team:any' && a.teamId === teamId) ||
-        (permission === 'ticket:read:assigned:team:unclaimed' && a.teamId === teamId && a.userTeamId == null) ||
+        (permission === 'ticket:read:assigned:team:any' && assignedTeamId === teamId) ||
+        (permission === 'ticket:read:assigned:team:unclaimed' && assignedTeamId === teamId && a.userTeamId == null) ||
         (permission === 'ticket:read:assigned:self' && a.userTeamId === userTeamId)
       ) {
         via.push({ userTeamId, teamId, from, permission, type })
@@ -121,9 +124,11 @@ export async function getTicketAccessForUser(
 
     if (type === 'creation' && ticket.createdBy) {
       const c = ticket.createdBy
+      const createdTeamId = c.teamId ?? c.userTeam?.teamId
+
       if (
         permission === 'ticket:read:createdby:any' ||
-        (permission === 'ticket:read:createdby:team:any' && c.teamId === teamId) ||
+        (permission === 'ticket:read:createdby:team:any' && createdTeamId === teamId) ||
         (permission === 'ticket:read:createdby:self' && c.userTeamId === userTeamId)
       ) {
         via.push({ userTeamId, teamId, from, permission, type })
