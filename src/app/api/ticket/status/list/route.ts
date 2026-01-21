@@ -37,6 +37,32 @@ export async function GET(req: NextRequest) {
     orderBy: { priority: 'asc' },
   })
 
-  // 5. Return JSON array
+  // 5. Filter for Creation if requested
+  const { searchParams } = new URL(req.url)
+  const createTicket = searchParams.get('createTicket') === 'true'
+
+  if (createTicket) {
+    const user = session.user as any
+    const effectivePerms = new Set<string>(user.permissions || [])
+
+    // Add active team permissions if acting as a team
+    if (user.actingAs) {
+      const activeTeam = (user.teams as any[]).find((t: any) => t.userTeamId === user.actingAs.userTeamId)
+      if (activeTeam) {
+        if (activeTeam.permissions) activeTeam.permissions.forEach((p: string) => effectivePerms.add(p))
+        if (activeTeam.userTeamPermissions) activeTeam.userTeamPermissions.forEach((p: string) => effectivePerms.add(p))
+      }
+    }
+
+    // Filter statuses
+    const filteredStatuses = statuses.filter(s =>
+      effectivePerms.has('ticket:create:status:any') ||
+      effectivePerms.has(`ticket:create:status:${s.id}`)
+    )
+
+    return NextResponse.json(filteredStatuses)
+  }
+
+  // 6. Return all for normal view
   return NextResponse.json(statuses)
 }
