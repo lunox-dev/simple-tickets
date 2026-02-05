@@ -136,6 +136,7 @@ export async function GET(req: NextRequest) {
               multiSelect: true,
               key: true,
               priority: true,
+              apiConfig: true,
               ticketFieldGroup: { select: { id: true, name: true } }
             }
           }
@@ -669,6 +670,7 @@ export async function GET(req: NextRequest) {
         type: v.ticketFieldDefinition.type,
         multiSelect: v.ticketFieldDefinition.multiSelect,
         key: v.ticketFieldDefinition.key,
+        apiConfig: v.ticketFieldDefinition.apiConfig,
         value: v.value,
         group: v.ticketFieldDefinition.ticketFieldGroup ? {
           id: v.ticketFieldDefinition.ticketFieldGroup.id,

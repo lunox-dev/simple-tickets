@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
 
     // Filter statuses
     const filteredStatuses = statuses.filter(s =>
+      effectivePerms.has('ticket:create') || // Allow if user can create tickets
       effectivePerms.has('ticket:create:status:any') ||
       effectivePerms.has(`ticket:create:status:${s.id}`)
     )

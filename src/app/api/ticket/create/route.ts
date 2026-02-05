@@ -141,10 +141,12 @@ export async function POST(req: NextRequest) {
   }
 
   // ─── status permission check ────────────────────────────────────────────────
+  // ─── status permission check ────────────────────────────────────────────────
   const canCreateStatusAny = permSet.has('ticket:create:status:any')
   const canCreateStatusSpecific = permSet.has(`ticket:create:status:${status}`)
+  const canCreateTicketBase = permSet.has('ticket:create')
 
-  if (!canCreateStatusAny && !canCreateStatusSpecific) {
+  if (!canCreateStatusAny && !canCreateStatusSpecific && !canCreateTicketBase) {
     return NextResponse.json({ error: 'You are not allowed to create tickets with this status' }, { status: 403 })
   }
 

@@ -11,13 +11,17 @@ export async function POST(req: NextRequest) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // 2. Parse Payload
-    const { fieldDefinitionId, value } = await req.json() as { fieldDefinitionId?: number, value?: string | string[] }
+    const { fieldDefinitionId, value, dependencyValue } = await req.json() as {
+        fieldDefinitionId?: number,
+        value?: string | string[],
+        dependencyValue?: string
+    }
 
     if (!fieldDefinitionId) return NextResponse.json({ error: 'fieldDefinitionId required' }, { status: 400 })
     if (value === undefined || value === null || value === '') return NextResponse.json({ labels: [] })
 
     try {
-        // 3. Get Field Definition
+        // ... (existing code 3, 4, 5) ...
         const fieldDef = await prisma.ticketFieldDefinition.findUnique({
             where: { id: fieldDefinitionId }
         })
@@ -27,21 +31,13 @@ export async function POST(req: NextRequest) {
         // 4. Check permissions (read access to category)
         const allowedCats = await getAccessibleCategoryIds(session.user)
         if (fieldDef.applicableCategoryId && !allowedCats.has(fieldDef.applicableCategoryId)) {
-            // If user can't see category, they can't resolve value?
-            // Actually, if they are viewing a ticket, they already have access.
-            // Ticket View page allows viewing if user has access to TICKET.
-            // But strict category check is better for now.
-            // OR: ignore category check because resolving a label is low risk?
-            // Let's enforce it.
-            // Wait, if I am viewing a ticket in a category I have read access to?
-            // getAccessibleCategoryIds returns IDs I can "view"?
-            // Yes.
+            // ...
             if (fieldDef.applicableCategoryId && !allowedCats.has(fieldDef.applicableCategoryId)) {
                 return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
             }
         }
 
-        // 5. If not API field, return value as label (or handle otherwise?)
+        // 5. If not API field
         if (fieldDef.type !== 'API_SELECT') {
             return NextResponse.json({ labels: Array.isArray(value) ? value : [value] })
         }
@@ -50,9 +46,27 @@ export async function POST(req: NextRequest) {
         const config = fieldDef.apiConfig as any
         if (!config || !config.url) return NextResponse.json({ error: 'Invalid API config' }, { status: 500 })
 
+        // Handle URL Parameters (Dependency Injection)
+        let finalUrl = config.url
+        // Default to URL_PARAM if dependencyParam is set but nestedPath is not (implies remote fetch)
+        const isUrlParamMode = config.dependencyMode === 'URL_PARAM' || (config.dependencyParam && !config.nestedPath)
+
+        if (isUrlParamMode) {
+            // We need a dependency value.
+            // If provided in payload, use it.
+            if (dependencyValue) {
+                const separator = finalUrl.includes('?') ? '&' : '?'
+                finalUrl = `${finalUrl}${separator}${config.dependencyParam}=${encodeURIComponent(dependencyValue)}`
+            } else {
+                // Warning: Missing dependency value for a dependent field. 
+                // The API might fail (400), which we catch below.
+                console.warn(`Field ${fieldDefinitionId} depends on ${config.dependsOnFieldKey} but no value provided.`)
+            }
+        }
+
         const headers = config.headers || {}
 
-        const response = await fetch(config.url, {
+        const response = await fetch(finalUrl, {
             method: config.method || 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -61,7 +75,16 @@ export async function POST(req: NextRequest) {
         })
 
         if (!response.ok) {
-            return NextResponse.json({ error: `External API Error: ${response.status}` }, { status: 502 })
+            const errText = await response.text()
+            console.warn(`[ResolveValue] API Error: ${response.status} ${response.statusText}`)
+            console.warn(`[ResolveValue] Body: ${errText}`)
+
+            // Fallback: If API fails (e.g. 400 due to missing params), return raw value as label
+            return NextResponse.json({
+                items: Array.isArray(value)
+                    ? value.map(v => ({ value: v, label: v }))
+                    : [{ value, label: value }]
+            })
         }
 
         const rawData = await response.json()

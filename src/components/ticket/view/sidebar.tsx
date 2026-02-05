@@ -135,7 +135,7 @@ interface ResolvedItem {
   }
 }
 
-function TicketFieldDisplay({ field }: { field: NonNullable<TicketData['customFields']>[0] }) {
+function TicketFieldDisplay({ field, allFields }: { field: NonNullable<TicketData['customFields']>[0], allFields: NonNullable<TicketData['customFields']> }) {
   const [resolvedItems, setResolvedItems] = useState<ResolvedItem[]>([])
   const [loading, setLoading] = useState(false)
   const [fallback, setFallback] = useState<string | null>(null)
@@ -154,11 +154,29 @@ function TicketFieldDisplay({ field }: { field: NonNullable<TicketData['customFi
     }
 
     if (field.type === 'API_SELECT') {
+      // Check for dependencies
+      let dependencyValue: string | undefined
+      const config = field.apiConfig as any
+      if (config && config.dependsOnFieldKey && allFields) {
+        const parentField = allFields.find(f => f.key === config.dependsOnFieldKey)
+        if (parentField && parentField.value) {
+          // Assuming parent is single select for now, or take first value?
+          // Usually dependency is on an ID.
+          dependencyValue = parentField.value
+          // If parent is JSON array (multi), we might need to handle that, but for now take raw.
+          // If parent is also API_SELECT, its value should be the ID (which it is).
+        }
+      }
+
       setLoading(true)
       fetch('/api/ticket/field/resolve-value', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fieldDefinitionId: field.id, value: parsedValue })
+        body: JSON.stringify({
+          fieldDefinitionId: field.id,
+          value: parsedValue,
+          dependencyValue // Pass the context
+        })
       })
         .then((res) => res.json())
         .then((data) => {
@@ -809,7 +827,7 @@ export default function TicketSidebar({ ticket, user, meta, allowedActions, onTi
                     <div key={field.id} className="space-y-1">
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{field.label}</label>
                       <div className="p-2.5 bg-muted/10 rounded-md border border-border min-h-[36px] flex items-center">
-                        <TicketFieldDisplay field={field} />
+                        <TicketFieldDisplay field={field} allFields={ticket.customFields || []} />
                       </div>
                     </div>
                   ))}
