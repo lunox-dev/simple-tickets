@@ -46,6 +46,15 @@ interface TicketData {
   createdBy: TicketEntity
   createdAt: string
   updatedAt: string
+  customFields?: {
+    id: number
+    label: string
+    type: string
+    multiSelect: boolean
+    key: string | null
+    value: string
+    group: { id: number; name: string } | null
+  }[]
 }
 
 interface Priority {
@@ -114,6 +123,89 @@ interface SidebarProps {
   allowedActions: AllowedActions
   onTicketUpdate: () => void
   onClose?: () => void
+
+}
+
+interface ResolvedItem {
+  value: string
+  label: string
+  metadata?: {
+    image?: string
+    description?: string
+  }
+}
+
+function TicketFieldDisplay({ field }: { field: NonNullable<TicketData['customFields']>[0] }) {
+  const [resolvedItems, setResolvedItems] = useState<ResolvedItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [fallback, setFallback] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!field.value) {
+      setFallback("-")
+      return
+    }
+
+    let parsedValue: string | string[] = field.value
+    if (field.multiSelect) {
+      try {
+        parsedValue = JSON.parse(field.value)
+      } catch { }
+    }
+
+    if (field.type === 'API_SELECT') {
+      setLoading(true)
+      fetch('/api/ticket/field/resolve-value', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fieldDefinitionId: field.id, value: parsedValue })
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.items && Array.isArray(data.items)) {
+            setResolvedItems(data.items)
+          } else if (data.labels) {
+            // Fallback for types not returning items yet (legacy)
+            setResolvedItems(data.labels.map((l: string) => ({ label: l, value: '' })))
+          } else {
+            const raw = Array.isArray(parsedValue) ? parsedValue.join(", ") : String(parsedValue)
+            setFallback(raw)
+          }
+        })
+        .catch(() => {
+          const raw = Array.isArray(parsedValue) ? parsedValue.join(", ") : String(parsedValue)
+          setFallback(raw)
+        })
+        .finally(() => setLoading(false))
+    } else {
+      const raw = Array.isArray(parsedValue) ? parsedValue.join(", ") : String(parsedValue)
+      setFallback(raw)
+    }
+  }, [field])
+
+  if (loading) return <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+
+  if (resolvedItems.length > 0) {
+    return (
+      <div className="flex flex-col gap-2">
+        {resolvedItems.map((item, i) => (
+          <div key={i} className="flex items-center gap-2">
+            {item.metadata?.image && (
+              <img src={item.metadata.image} alt="" className="w-5 h-5 rounded object-cover border bg-muted" />
+            )}
+            <div className="flex flex-col leading-tight">
+              <span className="text-sm font-medium">{item.label}</span>
+              {item.metadata?.description && (
+                <span className="text-[10px] text-muted-foreground">{item.metadata.description}</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return <span className="text-sm font-medium text-foreground break-words">{fallback}</span>
 }
 
 export default function TicketSidebar({ ticket, user, meta, allowedActions, onTicketUpdate, onClose }: SidebarProps) {
@@ -688,6 +780,44 @@ export default function TicketSidebar({ ticket, user, meta, allowedActions, onTi
               </div>
             )}
           </div>
+
+          {(ticket.customFields && ticket.customFields.length > 0) && (
+            <>
+              <Separator className="bg-border" />
+
+              {Object.entries(
+                (ticket.customFields || []).reduce((acc, field) => {
+                  const groupName = field.group?.name || "Additional Information"
+                  if (!acc[groupName]) acc[groupName] = []
+                  acc[groupName].push(field)
+                  return acc
+                }, {} as Record<string, NonNullable<TicketData['customFields']>>)
+              ).sort((a, b) => {
+                if (a[0] === "Additional Information") return 1
+                if (b[0] === "Additional Information") return -1
+                return a[0].localeCompare(b[0])
+              }).map(([groupName, fields]) => (
+                <div key={groupName} className="space-y-3">
+                  {groupName !== "Additional Information" && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="h-px bg-border flex-1" />
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{groupName}</span>
+                      <div className="h-px bg-border flex-1" />
+                    </div>
+                  )}
+                  {fields.map(field => (
+                    <div key={field.id} className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{field.label}</label>
+                      <div className="p-2.5 bg-muted/10 rounded-md border border-border min-h-[36px] flex items-center">
+                        <TicketFieldDisplay field={field} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </>
+          )}
+
         </CardContent>
       </Card>
 

@@ -28,14 +28,49 @@ export async function GET(req: NextRequest) {
     return handlePermissionError(new PermissionError('ticketcategory:view:any OR ticketcategory:view:own', 'ticket_category'))
   }
 
-  // 3. Parse and validate categoryId query param
+  // 3. Parse query params
   const catParam = req.nextUrl.searchParams.get('categoryId')
+  const groupParam = req.nextUrl.searchParams.get('groupId')
+
   const categoryId = catParam ? parseInt(catParam, 10) : NaN
-  if (isNaN(categoryId)) {
-    return NextResponse.json({ error: 'categoryId (numeric) is required' }, { status: 400 })
+  const groupId = groupParam ? parseInt(groupParam, 10) : NaN
+
+  if (isNaN(categoryId) && isNaN(groupId)) {
+    return NextResponse.json({ error: 'categoryId OR groupId (numeric) is required' }, { status: 400 })
   }
 
-  // 4. If only "own", verify access to this category (including descendants)
+  // 4a. If fetching by Group ID (Admin context usually)
+  if (!isNaN(groupId)) {
+    // Validate permission to manage groups/fields or just view?
+    // For now, reuse the generic permission check.
+    if (!canViewAny && !canViewOwn) {
+      // Strictly speaking, managing fields in a group might require specific permissions, but reusing existing category view perm for list is okay for list.
+      return handlePermissionError(new PermissionError('ticketcategory:view:any', 'ticket_category'))
+    }
+
+    const defs = await prisma.ticketFieldDefinition.findMany({
+      where: { ticketFieldGroupId: groupId },
+      orderBy: { priority: 'asc' },
+      select: {
+        id: true,
+        label: true,
+        key: true,
+        type: true,
+        requiredAtCreation: true,
+        multiSelect: true,
+        regex: true,
+        activeInCreate: true,
+        activeInRead: true,
+        apiConfig: true,
+        priority: true,
+        ticketFieldGroup: { select: { id: true, name: true } }
+      }
+    })
+    return NextResponse.json(defs)
+  }
+
+  // 4b. Fetching by Category (Ticket Create/View context)
+  // If only "own", verify access to this category (including descendants)
   if (!canViewAny) {
     // a) load all categories for tree
     const allCats = await prisma.ticketCategory.findMany({
@@ -85,20 +120,64 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 6. Fetch unique field definitions for those categories
+  // 6. Fetch unique field definitions for those categories AND fields linked to groups associated with those categories
+  // Wait, schema says GroupCategory link exists.
+  // So: Fields -> Group -> Categories.
+  // Query: Find Groups where 'categories' contains any of 'ancestors'.
+  // Then Find Fields where ticketFieldGroupId is in those Groups OR applicableCategoryId is in ancestors (legacy support).
+
+  const relevantGroups = await prisma.ticketFieldGroupCategory.findMany({
+    where: { ticketCategoryId: { in: Array.from(ancestors) } },
+    select: { ticketFieldGroupId: true }
+  })
+  const relevantGroupIds = relevantGroups.map(g => g.ticketFieldGroupId)
+
   const defs = await prisma.ticketFieldDefinition.findMany({
-    where: { applicableCategoryId: { in: Array.from(ancestors) } },
-    select: { id: true, label: true, regex: true, requiredAtCreation: true },
+    where: {
+      OR: [
+        { applicableCategoryId: { in: Array.from(ancestors) } },
+        { ticketFieldGroupId: { in: relevantGroupIds } }
+      ],
+      activeInCreate: true // Only return fields active in create
+    },
+    select: {
+      id: true,
+      label: true,
+      key: true,
+      regex: true,
+      requiredAtCreation: true,
+      type: true,
+      multiSelect: true,
+      apiConfig: true,
+      priority: true,
+      ticketFieldGroup: {
+        select: {
+          id: true,
+          name: true,
+          description: true
+        }
+      }
+    },
     orderBy: [
+      { ticketFieldGroupId: 'asc' },
       { priority: 'asc' },
       { label: 'asc' }
     ]
   })
 
-  // Map requiredAtCreation to required for API consumers
-  return NextResponse.json(defs.map(def => ({
-    ...def,
-    required: def.requiredAtCreation,
-    requiredAtCreation: undefined // Optionally remove the original field
-  })))
+  // Map requiredAtCreation to required and sanitize apiConfig
+  return NextResponse.json(defs.map(def => {
+    const config = def.apiConfig as any
+    return {
+      ...def,
+      required: def.requiredAtCreation,
+      requiredAtCreation: undefined,
+      apiConfig: config ? {
+        dependsOnFieldKey: config.dependsOnFieldKey,
+        dependencyParam: config.dependencyParam,
+        dependencyMode: config.dependencyMode,
+        nestedPath: config.nestedPath
+      } : undefined
+    }
+  }))
 }

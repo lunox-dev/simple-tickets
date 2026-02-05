@@ -42,6 +42,15 @@ interface TicketData {
   createdBy: TicketEntity
   createdAt: string
   updatedAt: string
+  customFields: {
+    id: number
+    label: string
+    type: string
+    multiSelect: boolean
+    key: string | null
+    value: string
+    group: { id: number; name: string } | null
+  }[]
 }
 
 interface ActivityLogEntry {

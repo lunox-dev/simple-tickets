@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, type ChangeEvent, type FormEvent } from "react"
+import { ApiSelect } from "./api-select"
 import type { Content } from "@tiptap/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -85,8 +86,20 @@ interface FlatEntity {
 interface CustomFieldDefinition {
   id: number
   label: string
+  key: string
   regex: string | null
   required?: boolean
+  type: string
+  multiSelect: boolean
+  ticketFieldGroup?: {
+    id: number
+    name: string
+    description: string | null
+  } | null
+  apiConfig?: {
+    dependsOnFieldKey?: string
+    dependencyParam?: string
+  }
 }
 
 interface CustomFieldValue {
@@ -513,9 +526,102 @@ export default function NewTicketForm() {
       .slice(0, 2)
   }
 
+  // ... inside NewTicketForm or outside? Inside to access state.
+  // Actually, helper function inside render is okay, or plain map.
+  // But I need access to handleCustomFieldChange and values.
+
+  const renderField = (field: CustomFieldDefinition) => {
+    // Determine value: string or string[]? 
+    // customFieldValues is Record<number, string>.
+    // For multiSelect, we might store JSON string or need to change state type?
+    // "value: string" in TicketFieldValue suggests we store ONE string per row.
+    // In Frontend State, for multiSelect, we should probably store an array?
+    // But my state definition is: `const [customFieldValues, setCustomFieldValues] = useState<Record<number, string>>({})`
+    // I should update the state type to handle arrays?
+    // Or just serialize to CSV/JSON for local state and parse it?
+    // The ApiSelect expects `value: string | string[]`.
+    // Let's assume for now we store as CSV in the string state for simplicity?
+    // No, that's messy.
+    // Let's change state type in a separate mutation or cast it here?
+    // The interface `CustomFieldValue` for payload is fine (serialized).
+    // But React state... 
+    // Let's cast it here: 
+    // Raw value from state is string.
+    // If field.multiSelect, we parse it? 
+    // Wait, `value` in state is initialized to "".
+    // If I change ApiSelect to return array, I need to store array.
+    // Let's just handle it.
+
+    const val = customFieldValues[field.id]
+    const valParsed = field.multiSelect && val ? val.split(',') : (field.multiSelect ? [] : val)
+
+    // Resolve Dependency
+    let depParam: string | undefined
+    let depValue: string | undefined
+
+    if (field.apiConfig?.dependsOnFieldKey) {
+      depParam = field.apiConfig.dependencyParam
+      // Find parent field by KEY (assuming field definitions have unique keys or we search by key)
+      // Wait, field definition has 'key'? The schema says it has.
+      // I need to check if 'key' is in the fetch list.
+      // Step 544 shows 'key: true' is selected in `api/ticket/field/list`.
+      // So I can find parent field.
+      const parentField = customFields.find(f => f.key === field.apiConfig?.dependsOnFieldKey)
+      if (parentField) {
+        // Get value of parent from state
+        depValue = customFieldValues[parentField.id]
+      }
+    }
+
+    return (
+      <div key={field.id} className="space-y-2">
+        <Label htmlFor={`custom-field-${field.id}`} className="text-sm font-medium">
+          {field.label}
+          {field.required && <span className="text-destructive ml-1">*</span>}
+        </Label>
+
+        {(field.type === 'API_SELECT' || field.type === 'API_COMBINE') ? (
+          <ApiSelect
+            fieldId={field.id}
+            value={valParsed}
+            onChange={(v) => {
+              // Store as comma-joined string? Or JSON?
+              // Ticket create API expects arrays of { fieldDefinitionId, value }.
+              // If I store "A,B", backend receives one row "A,B".
+              // Backend expects multiple rows!
+              // My update to backend `ticket/create` handles `fieldArr`.
+              // Frontend needs to send `fields: [{id:1, value:"A"}, {id:1, value:"B"}]`.
+              // So I need state to support Array.
+              // I will update interface `customFieldValues` to `Record<number, string | string[]>`.
+
+              // But I can't easily change the *entire* file's types in one Replace block without conflict.
+              // Hack: Store as array in state (any), cast when needed.
+              handleCustomFieldChange(field.id, v as any)
+            }}
+            multiSelect={field.multiSelect}
+            error={!!customFieldErrors[field.id]}
+            dependencyParam={depParam}
+            dependencyValue={depValue}
+            required={field.required}
+          />
+        ) : (
+          <Input
+            id={`custom-field-${field.id}`}
+            value={val as string || ""}
+            onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
+            placeholder={`Enter ${field.label.toLowerCase()}`}
+            className={cn("h-11", customFieldErrors[field.id] && "border-destructive focus:ring-destructive")}
+          />
+        )}
+
+        {customFieldErrors[field.id] && <p className="text-xs text-destructive">{customFieldErrors[field.id]}</p>}
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+
       <header className="sticky top-0 z-40 border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
@@ -585,6 +691,49 @@ export default function NewTicketForm() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Custom Fields Card */}
+              {customFields.length > 0 && (() => {
+                // Group fields
+                const ungrouped = customFields.filter(f => !f.ticketFieldGroup)
+                const grouped = customFields.reduce((acc, f) => {
+                  if (f.ticketFieldGroup) {
+                    const gid = f.ticketFieldGroup.id
+                    if (!acc[gid]) acc[gid] = { group: f.ticketFieldGroup, fields: [] }
+                    acc[gid].fields.push(f)
+                  }
+                  return acc
+                }, {} as Record<number, { group: any, fields: CustomFieldDefinition[] }>)
+
+                return (
+                  <div className="space-y-6">
+                    {/* Render Groups */}
+                    {Object.values(grouped).map(({ group, fields }) => (
+                      <Card key={group.id} className="border-border/40 shadow-sm">
+                        <CardContent className="pt-6">
+                          <h3 className="text-sm font-semibold mb-1">{group.name}</h3>
+                          {group.description && <p className="text-xs text-muted-foreground mb-4">{group.description}</p>}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {fields.map(renderField)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+
+                    {/* Render Ungrouped */}
+                    {ungrouped.length > 0 && (
+                      <Card className="border-border/40 shadow-sm">
+                        <CardContent className="pt-6">
+                          <h3 className="text-sm font-semibold mb-4">Additional Information</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {ungrouped.map(renderField)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Description + Attachments in ONE container */}
               <Card className="border-border/40 shadow-sm">
@@ -707,32 +856,7 @@ export default function NewTicketForm() {
                 </CardContent>
               </Card>
 
-              {/* Custom Fields Card */}
-              {customFields.length > 0 && (
-                <Card className="border-border/40 shadow-sm">
-                  <CardContent className="pt-6">
-                    <h3 className="text-sm font-semibold mb-4">Additional Information</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {customFields.map((field) => (
-                        <div key={field.id} className="space-y-2">
-                          <Label htmlFor={`custom-field-${field.id}`} className="text-sm font-medium">
-                            {field.label}
-                            {field.required && <span className="text-destructive ml-1">*</span>}
-                          </Label>
-                          <Input
-                            id={`custom-field-${field.id}`}
-                            value={customFieldValues[field.id] || ""}
-                            onChange={(e) => handleCustomFieldChange(field.id, e.target.value)}
-                            placeholder={`Enter ${field.label.toLowerCase()}`}
-                            className={cn("h-11", customFieldErrors[field.id] && "border-destructive focus:ring-destructive")}
-                          />
-                          {customFieldErrors[field.id] && <p className="text-xs text-destructive">{customFieldErrors[field.id]}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+
             </div>
 
             {/* Sidebar */}
@@ -910,6 +1034,6 @@ export default function NewTicketForm() {
           </div>
         </form>
       </main>
-    </div>
+    </div >
   )
 }

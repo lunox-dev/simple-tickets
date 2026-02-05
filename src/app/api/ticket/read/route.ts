@@ -124,16 +124,50 @@ export async function GET(req: NextRequest) {
         }
       },
       createdAt: true,
-      updatedAt: true
+      updatedAt: true,
+      fieldValues: {
+        select: {
+          value: true,
+          ticketFieldDefinition: {
+            select: {
+              id: true,
+              label: true,
+              type: true,
+              multiSelect: true,
+              key: true,
+              priority: true,
+              ticketFieldGroup: { select: { id: true, name: true } }
+            }
+          }
+        }
+      }
     }
   })
   if (!ticket) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  // Fetch all categories for parent chain resolution
+  // Sort fieldValues by priority
+  if (ticket.fieldValues) {
+    ticket.fieldValues.sort((a, b) => {
+      const pA = a.ticketFieldDefinition.priority || 0
+      const pB = b.ticketFieldDefinition.priority || 0
+      return pA - pB
+    })
+  }
+
+  // Fetch all categories for parent chain resolution (unchanged)
   const allCategories = await prisma.ticketCategory.findMany({ select: { id: true, name: true, parentId: true, childDropdownLabel: true } })
   const categoryMap = new Map(allCategories.map(c => [c.id, c]))
+
+  /* ... rest of the file ... (Wait, I cannot easy replace "rest of file" without providing context)
+     I should target the select block and the map block separately or carefully.
+     The file has two occurrences of "values":
+     1. In select: { ... values: { ... } } (around line 128)
+     2. In map: ticket.values.map... (around line 645)
+     
+     I should make two replacements.
+  */
 
   // Helper to build parent chain string
   function buildCategoryChain(catId: number | null | undefined): string | null {
@@ -628,7 +662,19 @@ export async function GET(req: NextRequest) {
       currentAssignedTo: ticket.currentAssignedTo ? sanitizeEntity(formatEntity(ticket.currentAssignedTo)) : null,
       createdBy: sanitizeEntity(formatEntity(ticket.createdBy)),
       createdAt: ticket.createdAt,
-      updatedAt: ticket.updatedAt
+      updatedAt: ticket.updatedAt,
+      customFields: ticket.fieldValues.map(v => ({
+        id: v.ticketFieldDefinition.id,
+        label: v.ticketFieldDefinition.label,
+        type: v.ticketFieldDefinition.type,
+        multiSelect: v.ticketFieldDefinition.multiSelect,
+        key: v.ticketFieldDefinition.key,
+        value: v.value,
+        group: v.ticketFieldDefinition.ticketFieldGroup ? {
+          id: v.ticketFieldDefinition.ticketFieldGroup.id,
+          name: v.ticketFieldDefinition.ticketFieldGroup.name
+        } : null
+      }))
     },
     lastReadEvent: lastRead ? { type: lastRead.type, id: lastRead.id } : null,
     activityLog,

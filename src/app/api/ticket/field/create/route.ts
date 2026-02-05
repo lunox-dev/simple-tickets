@@ -26,7 +26,6 @@ export async function POST(req: NextRequest) {
   }
 
   // 2. Permission check
-  // 2. Permission check
   try {
     verifyPermission(permSet, 'ticketcategory:manage:any', 'ticket_category')
   } catch (err) {
@@ -34,27 +33,57 @@ export async function POST(req: NextRequest) {
   }
 
   // 3. Parse & validate payload
-  const { label, applicableCategoryId, requiredAtCreation, priority, regex } = await req.json() as {
+  const body = await req.json()
+  const {
+    label,
+    key,
+    applicableCategoryId,
+    requiredAtCreation,
+    priority,
+    regex,
+    type,
+    multiSelect,
+    apiConfig,
+    ticketFieldGroupId,
+    activeInCreate,
+    activeInRead
+  } = body as {
     label?: string
+    key?: string
     applicableCategoryId?: number
     requiredAtCreation?: boolean
     priority?: number
     regex?: string
+    type?: string
+    multiSelect?: boolean
+    apiConfig?: any
+    ticketFieldGroupId?: number
+    activeInCreate?: boolean
+    activeInRead?: boolean
   }
+
   if (typeof label !== 'string' || !label.trim()) {
     return NextResponse.json({ error: 'label is required' }, { status: 400 })
   }
-  if (typeof applicableCategoryId !== 'number') {
-    return NextResponse.json({ error: 'applicableCategoryId (number) is required' }, { status: 400 })
+  // applicableCategoryId is now optional
+  if (ticketFieldGroupId && typeof ticketFieldGroupId !== 'number') {
+    return NextResponse.json({ error: 'ticketFieldGroupId must be a number' }, { status: 400 })
   }
+
   if (typeof requiredAtCreation !== 'boolean') {
     return NextResponse.json({ error: 'requiredAtCreation (boolean) is required' }, { status: 400 })
   }
   if (typeof priority !== 'number') {
     return NextResponse.json({ error: 'priority (number) is required' }, { status: 400 })
   }
-  if (typeof regex !== 'string' || !regex.trim()) {
-    return NextResponse.json({ error: 'regex is required' }, { status: 400 })
+
+  // New validations
+  if (type && !['TEXT', 'API_SELECT'].includes(type)) {
+    return NextResponse.json({ error: 'Invalid field type' }, { status: 400 })
+  }
+
+  if (type === 'API_SELECT' && !apiConfig) {
+    return NextResponse.json({ error: 'apiConfig is required for API fields' }, { status: 400 })
   }
 
   // 4. Create the custom field
@@ -62,10 +91,17 @@ export async function POST(req: NextRequest) {
     const field = await prisma.ticketFieldDefinition.create({
       data: {
         label: label.trim(),
-        applicableCategoryId,
+        key: key?.trim() || "",
+        applicableCategoryId: (applicableCategoryId || undefined) as any,
         requiredAtCreation,
         priority,
-        regex: regex.trim()
+        regex: regex?.trim() || "", // regex optional now? or empty string
+        type: type || 'TEXT',
+        multiSelect: multiSelect || false,
+        apiConfig: apiConfig || undefined,
+        ticketFieldGroupId: ticketFieldGroupId || null,
+        activeInCreate: activeInCreate ?? true,
+        activeInRead: activeInRead ?? true
       }
     })
     return NextResponse.json({ field }, { status: 201 })

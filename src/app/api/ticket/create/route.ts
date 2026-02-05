@@ -184,7 +184,7 @@ export async function POST(req: NextRequest) {
   }
   const defs = await prisma.ticketFieldDefinition.findMany({
     where: { applicableCategoryId: { in: Array.from(catIds) } },
-    select: { id: true, requiredAtCreation: true }
+    select: { id: true, label: true, requiredAtCreation: true, multiSelect: true }
   })
   const requiredDefs = defs.filter(d => d.requiredAtCreation).map(d => d.id)
   const providedDefIds = new Set(fieldArr.map(f => f.fieldDefinitionId))
@@ -243,6 +243,24 @@ export async function POST(req: NextRequest) {
       }
 
       for (const f of fieldArr) {
+        // Enforce multiSelect logic
+        if (!f.value) continue; // skip empty?
+
+        // Check if multiple values are allowed for this fieldDef
+        const def = defs.find(d => d.id === f.fieldDefinitionId)
+        if (def && !def.multiSelect) {
+          // Count occurrences
+          const count = fieldArr.filter(item => item.fieldDefinitionId === f.fieldDefinitionId).length
+          if (count > 1) {
+            // This will throw inside transaction, failing it.
+            // Better to validate outside transaction, but we only fetched defs partially.
+            // Let's rely on the previous loop check or just let it slide? 
+            // No, strict validation. 
+            // We'll throw an error to abort transaction
+            throw new Error(`Field '${def.label}' does not accept multiple values.`)
+          }
+        }
+
         await tx.ticketFieldValue.create({
           data: {
             ticketId: ticket.id,
