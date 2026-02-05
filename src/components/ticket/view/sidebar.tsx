@@ -54,6 +54,7 @@ interface TicketData {
     key: string | null
     value: string
     group: { id: number; name: string } | null
+    apiConfig?: any
   }[]
 }
 
