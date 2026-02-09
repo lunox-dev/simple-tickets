@@ -11,10 +11,11 @@ export async function POST(req: NextRequest) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // 2. Parse Payload
-    const { fieldDefinitionId, value, dependencyValue } = await req.json() as {
+    const { fieldDefinitionId, value, dependencyValue, context } = await req.json() as {
         fieldDefinitionId?: number,
         value?: string | string[],
-        dependencyValue?: string
+        dependencyValue?: string,
+        context?: Record<string, any>
     }
 
     if (!fieldDefinitionId) return NextResponse.json({ error: 'fieldDefinitionId required' }, { status: 400 })
@@ -53,14 +54,23 @@ export async function POST(req: NextRequest) {
 
         if (isUrlParamMode) {
             // We need a dependency value.
-            // If provided in payload, use it.
-            if (dependencyValue) {
+            let depVal = dependencyValue
+
+            // If not provided, try to find it in context
+            if (!depVal && context && config.dependsOnFieldKey) {
+                depVal = context[config.dependsOnFieldKey]
+            }
+
+
+            // If provided (or found in context), use it.
+            if (depVal) {
                 const separator = finalUrl.includes('?') ? '&' : '?'
-                finalUrl = `${finalUrl}${separator}${config.dependencyParam}=${encodeURIComponent(dependencyValue)}`
+                finalUrl = `${finalUrl}${separator}${config.dependencyParam}=${encodeURIComponent(depVal)}`
             } else {
                 // Warning: Missing dependency value for a dependent field. 
                 // The API might fail (400), which we catch below.
-                console.warn(`Field ${fieldDefinitionId} depends on ${config.dependsOnFieldKey} but no value provided.`)
+                console.warn(`Field ${fieldDefinitionId} depends on ${config.dependsOnFieldKey} but no value (or context) provided.`)
+                console.warn('Context Keys:', context ? Object.keys(context) : 'null')
             }
         }
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,9 +24,12 @@ import {
   ChevronsUpDown,
   Check,
   Users,
+  Pencil,
 } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
+import { ApiSelect } from "@/components/ticket/new/api-select"
+import { Input } from "@/components/ui/input"
 
 interface TicketEntity {
   entityId: number
@@ -99,33 +102,6 @@ interface FlatEntity {
   level: number
 }
 
-interface AllowedActions {
-  allowedStatuses: number[]
-  allowedPriorities: number[]
-  allowedCategories: number[]
-  allowedAssignees: string[]
-  claimType: 'CLAIM' | 'FORCE_CLAIM' | null
-}
-
-interface SidebarProps {
-  ticket: TicketData
-  user: {
-    id: number
-    permissions: string[]
-    teams: { id: number; teamId: number }[]
-  }
-  meta: {
-    statuses: Status[]
-    priorities: Priority[]
-    categories: { id: number; name: string; parentId: number | null; childDropdownLabel?: string | null }[]
-    categoryTree: Category[]
-    entities: Entity[]
-  }
-  allowedActions: AllowedActions
-  onTicketUpdate: () => void
-  onClose?: () => void
-
-}
 
 interface ResolvedItem {
   value: string
@@ -135,15 +111,55 @@ interface ResolvedItem {
     description?: string
   }
 }
+interface AllowedActions {
+  allowedStatuses: number[]
+  allowedPriorities: number[]
+  allowedCategories: number[]
+  allowedAssignees: string[]
+  claimType: 'CLAIM' | 'FORCE_CLAIM' | null
+  canUpdateCustomFields: boolean
+  canUpdateFreshCustomFields: boolean
+}
 
-function TicketFieldDisplay({ field, allFields }: { field: NonNullable<TicketData['customFields']>[0], allFields: NonNullable<TicketData['customFields']> }) {
+interface SidebarProps {
+  ticket: TicketData
+  user: any
+  meta: any
+  allowedActions: AllowedActions
+  onTicketUpdate: () => void
+  onClose?: () => void
+}
+
+
+function TicketFieldDisplay({ field, allFields, ticketId, canEdit, onUpdate }: {
+  field: NonNullable<TicketData['customFields']>[0],
+  allFields: NonNullable<TicketData['customFields']>,
+  ticketId: number,
+  canEdit: boolean,
+  onUpdate: () => void
+}) {
+  console.log(`Field ${field.id} (${field.label}) canEdit:`, canEdit, 'Value:', field.value)
   const [resolvedItems, setResolvedItems] = useState<ResolvedItem[]>([])
   const [loading, setLoading] = useState(false)
   const [fallback, setFallback] = useState<string | null>(null)
+  const lastValidContext = useRef<Record<string, string> | null>(null)
+  const lastSuccessfulValue = useRef<string | null>(null)
+
+  // Edit Mode State
+  const [isEditing, setIsEditing] = useState(false)
+  const [editValue, setEditValue] = useState<string>(field.value || "")
+  const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
-    if (!field.value) {
-      setFallback("-")
+    // Reset edit value when field changes
+    setEditValue(field.value || "")
+    setIsEditing(false)
+  }, [field.value])
+
+  // Resolve Value Effect (View Mode)
+  useEffect(() => {
+    if (!field.value || isEditing) { // Don't resolve if empty or editing (unless we want to show current resolved)
+      if (!field.value) setFallback("-")
       return
     }
 
@@ -154,6 +170,8 @@ function TicketFieldDisplay({ field, allFields }: { field: NonNullable<TicketDat
       } catch { }
     }
 
+    const currentRawValue = Array.isArray(parsedValue) ? parsedValue.join(",") : String(parsedValue)
+
     if (field.type === 'API_SELECT') {
       // Check for dependencies
       let dependencyValue: string | undefined
@@ -161,11 +179,7 @@ function TicketFieldDisplay({ field, allFields }: { field: NonNullable<TicketDat
       if (config && config.dependsOnFieldKey && allFields) {
         const parentField = allFields.find(f => f.key === config.dependsOnFieldKey)
         if (parentField && parentField.value) {
-          // Assuming parent is single select for now, or take first value?
-          // Usually dependency is on an ID.
           dependencyValue = parentField.value
-          // If parent is JSON array (multi), we might need to handle that, but for now take raw.
-          // If parent is also API_SELECT, its value should be the ID (which it is).
         }
       }
 
@@ -176,58 +190,194 @@ function TicketFieldDisplay({ field, allFields }: { field: NonNullable<TicketDat
         body: JSON.stringify({
           fieldDefinitionId: field.id,
           value: parsedValue,
-          dependencyValue // Pass the context
+          dependencyValue
         })
       })
         .then((res) => res.json())
         .then((data) => {
-          if (data.items && Array.isArray(data.items)) {
+          if (data.items && Array.isArray(data.items) && data.items.length > 0) {
             setResolvedItems(data.items)
+
+            // Store successful value and context
+            lastSuccessfulValue.current = currentRawValue
+
+            const newContext: Record<string, string> = {}
+            if (config.dependsOnFieldKey && dependencyValue) {
+              newContext[config.dependsOnFieldKey] = dependencyValue
+            }
+            if (field.key) {
+              newContext[field.key] = currentRawValue
+            }
+            lastValidContext.current = newContext
+
           } else if (data.labels) {
-            // Fallback for types not returning items yet (legacy)
             setResolvedItems(data.labels.map((l: string) => ({ label: l, value: '' })))
+          } else {
+            // If items are empty, check if we have a stale valid value
+            if (lastSuccessfulValue.current === currentRawValue && resolvedItems.length > 0) {
+              // Keep the existing resolved items and context!
+              // This handles the case where Org changes (making fetch return empty for this service ID)
+              // but we want to show the OLD service name until the user explicitly changes it.
+              // console.log("Preserving stale resolved value for:", currentRawValue)
+            } else {
+              setResolvedItems([])
+              const raw = Array.isArray(parsedValue) ? parsedValue.join(", ") : String(parsedValue)
+              setFallback(raw)
+            }
+          }
+        })
+        .catch(() => {
+          // On error, also try to preserve if value matches?
+          if (lastSuccessfulValue.current === currentRawValue && resolvedItems.length > 0) {
+            // Keep existing
           } else {
             const raw = Array.isArray(parsedValue) ? parsedValue.join(", ") : String(parsedValue)
             setFallback(raw)
           }
-        })
-        .catch(() => {
-          const raw = Array.isArray(parsedValue) ? parsedValue.join(", ") : String(parsedValue)
-          setFallback(raw)
         })
         .finally(() => setLoading(false))
     } else {
       const raw = Array.isArray(parsedValue) ? parsedValue.join(", ") : String(parsedValue)
       setFallback(raw)
     }
-  }, [field])
+  }, [field, allFields, isEditing])
 
-  if (loading) return <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+  const handleSave = async () => {
+    setIsSaving(true)
+    try {
+      // If value is array (multi), serialize it? ApiSelect returns array/string.
+      // The backend expects 'value' as string (if simple) or serialized JSON?
+      // Existing values are stored as strings. API_SELECT multiselect stores JSON string?
+      // Let's assume ApiSelect returns what we need, but we need to stringify if multiselect.
 
-  if (resolvedItems.length > 0) {
+      let payloadValue = editValue
+      if (Array.isArray(editValue) || (typeof editValue === 'object' && editValue !== null)) {
+        payloadValue = JSON.stringify(editValue)
+      }
+
+      const res = await fetch('/api/ticket/change/field', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticketId,
+          fieldDefinitionId: field.id,
+          value: payloadValue,
+          context: lastValidContext.current
+        })
+      })
+
+      if (!res.ok) throw new Error('Failed to update')
+
+      setIsEditing(false)
+      onUpdate()
+    } catch (err) {
+      console.error(err)
+      alert('Failed to save value')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Determine dependency params for Edit Mode
+  const dependencyInfo = useMemo(() => {
+    if (field.type !== 'API_SELECT') return {}
+    const config = field.apiConfig as any
+    if (config && config.dependsOnFieldKey) {
+      const parentField = allFields.find(f => f.key === config.dependsOnFieldKey)
+      return {
+        dependencyParam: config.dependencyParam || 'id', // Default or from config? resolve-value inferred it. ApiSelect usually needs it passed.
+        // Actually ApiSelect fetches fetch-options which handles dependency?
+        // fetch-options needs dependencyParam and dependencyValue.
+        // We need to pass them to ApiSelect prop.
+        dependencyValue: parentField?.value
+      }
+    }
+    return {}
+  }, [field, allFields])
+
+  // Clear edit value if dependency changes - REMOVED: Backend handles clearing.
+  // useEffect(() => {
+  //   if (dependencyInfo.dependencyValue && isEditing) {
+  //     setEditValue("")
+  //   }
+  // }, [dependencyInfo.dependencyValue])
+
+
+  if (isEditing) {
     return (
       <div className="flex flex-col gap-2">
-        {resolvedItems.map((item, i) => (
-          <div key={i} className="flex items-center gap-2">
-            {item.metadata?.image && (
-              <img src={item.metadata.image} alt="" className="w-5 h-5 rounded object-cover border bg-muted" />
-            )}
-            <div className="flex flex-col leading-tight">
-              <span className="text-sm font-medium">{item.label}</span>
-              {item.metadata?.description && (
-                <span className="text-[10px] text-muted-foreground">{item.metadata.description}</span>
-              )}
-            </div>
-          </div>
-        ))}
+        {field.type === 'API_SELECT' ? (
+          <ApiSelect
+            fieldId={field.id}
+            value={editValue}
+            onChange={(val) => setEditValue(val as string)}
+            multiSelect={field.multiSelect}
+            dependencyParam={dependencyInfo.dependencyParam}
+            dependencyValue={dependencyInfo.dependencyValue}
+            key={dependencyInfo.dependencyValue} // Reset if dependency changes
+          />
+        ) : (
+          <Input
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            className="h-8 text-sm"
+          />
+        )}
+        <div className="flex items-center gap-2 justify-end">
+          <Button size="sm" variant="ghost" onClick={() => setIsEditing(false)} disabled={isSaving} className="h-6 w-6 p-0">
+            <X className="h-3 w-3" />
+          </Button>
+          <Button size="sm" variant="default" onClick={handleSave} disabled={isSaving} className="h-6 w-6 p-0">
+            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+          </Button>
+        </div>
       </div>
     )
   }
 
-  return <span className="text-sm font-medium text-foreground break-words">{fallback}</span>
+  if (loading) return <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+
+  // View Mode with Edit Button
+  return (
+    <div className="group flex items-center justify-between w-full">
+      <div className="flex-1 min-w-0">
+        {resolvedItems.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            {resolvedItems.map((item, i) => (
+              <div key={i} className="flex items-center gap-2">
+                {item.metadata?.image && (
+                  <img src={item.metadata.image} alt="" className="w-5 h-5 rounded object-cover border bg-muted" />
+                )}
+                <div className="flex flex-col leading-tight">
+                  <span className="text-sm font-medium">{item.label}</span>
+                  {item.metadata?.description && (
+                    <span className="text-[10px] text-muted-foreground">{item.metadata.description}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <span className="text-sm font-medium text-foreground break-words">{fallback}</span>
+        )}
+      </div>
+
+      {canEdit && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity ml-2 shrink-0"
+          onClick={() => setIsEditing(true)}
+        >
+          <Pencil className="h-3 w-3 text-muted-foreground" />
+        </Button>
+      )}
+    </div>
+  )
 }
 
 export default function TicketSidebar({ ticket, user, meta, allowedActions, onTicketUpdate, onClose }: SidebarProps) {
+  console.log('TicketSidebar allowedActions:', allowedActions)
   // Derive state from props
   const priorities = meta.priorities
   const statuses = meta.statuses
@@ -559,8 +709,8 @@ export default function TicketSidebar({ ticket, user, meta, allowedActions, onTi
                 </SelectTrigger>
                 <SelectContent>
                   {statuses
-                    .filter((s) => canChangeStatus(s.id))
-                    .map((status) => (
+                    .filter((s: any) => canChangeStatus(s.id))
+                    .map((status: any) => (
                       <SelectItem key={status.id} value={status.id.toString()}>
                         <div className="flex items-center space-x-2.5">
                           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: status.color }} />
@@ -602,8 +752,8 @@ export default function TicketSidebar({ ticket, user, meta, allowedActions, onTi
                 </SelectTrigger>
                 <SelectContent>
                   {priorities
-                    .filter((p) => canChangePriority(p.id))
-                    .map((priority) => (
+                    .filter((p: any) => canChangePriority(p.id))
+                    .map((priority: any) => (
                       <SelectItem key={priority.id} value={priority.id.toString()}>
                         <div className="flex items-center space-x-2.5">
                           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: priority.color }} />
@@ -828,7 +978,17 @@ export default function TicketSidebar({ ticket, user, meta, allowedActions, onTi
                     <div key={field.id} className="space-y-1">
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{field.label}</label>
                       <div className="p-2.5 bg-muted/10 rounded-md border border-border min-h-[36px] flex items-center">
-                        <TicketFieldDisplay field={field} allFields={ticket.customFields || []} />
+                        <TicketFieldDisplay
+                          field={field}
+                          allFields={ticket.customFields || []}
+                          ticketId={ticket.id}
+                          canEdit={
+                            !!field.value
+                              ? allowedActions.canUpdateCustomFields
+                              : allowedActions.canUpdateFreshCustomFields
+                          }
+                          onUpdate={onTicketUpdate}
+                        />
                       </div>
                     </div>
                   ))}

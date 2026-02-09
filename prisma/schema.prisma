@@ -99,6 +99,7 @@ model Entity {
   priorityChanges         TicketChangePriority[]   @relation("ChangedByPriority")
   statusChanges           TicketChangeStatus[]     @relation("ChangedByStatus")
   categoryChanges         TicketChangeCategory[]   @relation("ChangedByCategory")
+  changedCustomFields     TicketChangeCustomField[] @relation("ChangedByCustomField")
   threadsCreated          TicketThread[]
   defaultAssignCategories TicketCategory[]         @relation("DefaultAssignEntity")
 
@@ -127,6 +128,7 @@ model Ticket {
   priorityChanges     TicketChangePriority[]
   statusChanges       TicketChangeStatus[]
   categoryChanges     TicketChangeCategory[]
+  customFieldChanges  TicketChangeCustomField[]
   threads             TicketThread[]
   fieldValues         TicketFieldValue[]
   createdAt           DateTime                 @default(now())
@@ -292,6 +294,7 @@ model TicketFieldDefinition {
   regex              String
   values             TicketFieldValue[]
   templateValues     TicketTemplateFieldValue[]
+  customFieldChanges TicketChangeCustomField[]
   createdAt          DateTime                   @default(now())
   updatedAt          DateTime                   @updatedAt
 }
@@ -372,6 +375,7 @@ enum NotificationType {
   TICKET_THREAD_NEW
   USER_ADDED_TO_TEAM
   TICKET_CREATED
+  TICKET_CUSTOM_FIELD_CHANGED
 }
 
 model NotificationEvent {
@@ -390,6 +394,8 @@ model NotificationEvent {
   onCategoryChangeId   Int?                    @unique
   onThread             TicketThread?           @relation(name: "EventOnThread", fields: [onThreadId], references: [id])
   onThreadId           Int?                    @unique
+  onCustomFieldChange   TicketChangeCustomField? @relation(name: "EventOnCustomFieldChange", fields: [onCustomFieldChangeId], references: [id])
+  onCustomFieldChangeId Int?                     @unique
 }
 
 model NotificationRecipient {
@@ -422,4 +428,20 @@ model TicketChangeCategory {
 
   /// back‐relation for notifications
   notificationEvent NotificationEvent? @relation(name: "EventOnCategoryChange")
+}
+
+model TicketChangeCustomField {
+  id                      Int                   @id @default(autoincrement())
+  ticket                  Ticket                @relation(fields: [ticketId], references: [id])
+  ticketId                Int
+  ticketFieldDefinition   TicketFieldDefinition @relation(fields: [ticketFieldDefinitionId], references: [id])
+  ticketFieldDefinitionId Int
+  valueFrom               String?
+  valueTo                 String?
+  changedBy               Entity                @relation("ChangedByCustomField", fields: [changedById], references: [id])
+  changedById             Int
+  changedAt               DateTime              @default(now())
+  context                 Json?                 // Stores snapshot of dependencies (e.g. { "organization": "123" })
+
+  notificationEvent       NotificationEvent?    @relation(name: "EventOnCustomFieldChange")
 }

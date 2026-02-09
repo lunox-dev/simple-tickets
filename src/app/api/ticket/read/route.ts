@@ -184,7 +184,7 @@ export async function GET(req: NextRequest) {
   }
 
   // 3) load all threads and change events (assignment/status/priority)
-  const [threads, assigns, prios, stats, cats] = await Promise.all([
+  const [threads, assigns, prios, stats, cats, customFields] = await Promise.all([
     prisma.ticketThread.findMany({
       where: { ticketId },
       select: {
@@ -346,6 +346,34 @@ export async function GET(req: NextRequest) {
         },
         notificationEvent: { select: { id: true } }
       }
+    }),
+    prisma.ticketChangeCustomField.findMany({
+      where: { ticketId },
+      select: {
+        id: true,
+        changedAt: true,
+        valueFrom: true,
+        valueTo: true,
+        context: true,
+        ticketFieldDefinition: { select: { id: true, label: true, type: true } },
+        changedBy: {
+          select: {
+            id: true,
+            teamId: true,
+            userTeamId: true,
+            team: { select: { id: true, name: true } },
+            userTeam: {
+              select: {
+                id: true,
+                teamId: true,
+                user: { select: { displayName: true } },
+                team: { select: { name: true } }
+              }
+            }
+          }
+        },
+        notificationEvent: { select: { id: true } }
+      }
     })
   ])
 
@@ -356,6 +384,7 @@ export async function GET(req: NextRequest) {
     ...prios.flatMap(p => p.notificationEvent?.id ?? []),
     ...stats.flatMap(s => s.notificationEvent?.id ?? []),
     ...cats.flatMap(c => c.notificationEvent?.id ?? []),
+    ...customFields.flatMap(c => c.notificationEvent?.id ?? []),
   ]
 
   // 5) load read flags
@@ -429,6 +458,22 @@ export async function GET(req: NextRequest) {
     })
   }
 
+  for (const cf of customFields) {
+    activityLog.push({
+      type: 'CUSTOM_FIELD_CHANGE',
+      id: cf.id,
+      at: cf.changedAt,
+      fieldDefinitionId: cf.ticketFieldDefinition.id,
+      fieldLabel: cf.ticketFieldDefinition.label,
+      fieldType: cf.ticketFieldDefinition.type,
+      from: cf.valueFrom,
+      to: cf.valueTo,
+      context: cf.context,
+      by: formatEntity(cf.changedBy),
+      read: cf.notificationEvent ? (readMap.get(cf.notificationEvent.id) ?? false) : false
+    })
+  }
+
   // 7) chronological sort
   activityLog.sort((a, b) => a.at.getTime() - b.at.getTime())
 
@@ -455,6 +500,7 @@ export async function GET(req: NextRequest) {
 
   // 10) return permissions and user info
   const allPermissions = [
+    ...((session.user as any).permissions || []),
     ...accessVia.map(v => v.permission),
     ...actionPermissions
   ]
@@ -648,6 +694,10 @@ export async function GET(req: NextRequest) {
   // 2. User must have permission
   const canReply = ticket.currentStatusId !== 4 && hasThreadCreatePermission(access, ticket.currentAssignedTo?.id)
 
+  // Custom Field Permissions (Force Rebuild)
+  const canUpdateCustomFields = allPermissions.includes('ticket:properties:manage')
+  const canUpdateFreshCustomFields = canReply || canUpdateCustomFields
+
   return NextResponse.json({
     user: {
       id: userId,
@@ -705,7 +755,9 @@ export async function GET(req: NextRequest) {
       allowedCategories,
       allowedAssignees: validEntityIds,
       claimType,
-      canReply
+      canReply,
+      canUpdateCustomFields,
+      canUpdateFreshCustomFields
     }
   })
 }

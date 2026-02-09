@@ -1,5 +1,7 @@
 "use client"
 
+import { useState, useEffect } from "react"
+
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -14,13 +16,14 @@ import {
   ExternalLink,
   ArrowRight,
   Clock,
+  Pencil,
 } from "lucide-react"
 import { format, formatDistanceToNow } from "date-fns"
 import { SimpleRichTextEditor } from "@/components/ui/SimpleRichTextEditor"
 import { cn } from "@/lib/utils"
 
 interface ActivityLogEntry {
-  type: "THREAD" | "ASSIGN_CHANGE" | "PRIORITY_CHANGE" | "STATUS_CHANGE" | "CATEGORY_CHANGE"
+  type: "THREAD" | "ASSIGN_CHANGE" | "PRIORITY_CHANGE" | "STATUS_CHANGE" | "CATEGORY_CHANGE" | "CUSTOM_FIELD_CHANGE"
   id: number
   at: string
   read: boolean
@@ -31,9 +34,71 @@ interface ConversationProps {
   activities: ActivityLogEntry[]
   lastReadEvent: { type: string; id: number } | null
   ticketId: number
+  ticket?: any
 }
 
-export default function TicketConversation({ activities, lastReadEvent, ticketId }: ConversationProps) {
+interface ResolvedValueProps {
+  value: string
+  fieldDefinitionId: number
+  fieldType: string
+  context?: Record<string, any>
+}
+
+function ResolvedValueDisplay({ value, fieldDefinitionId, fieldType, context }: ResolvedValueProps) {
+  const [resolved, setResolved] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!value || (fieldType !== 'API_SELECT' && fieldType !== 'API_COMBINE')) return
+
+    let cancelled = false
+    setLoading(true)
+
+    fetch('/api/ticket/field/resolve-value', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fieldDefinitionId, value, context })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (!cancelled) {
+          if (data.items && data.items.length > 0) {
+            setResolved(data.items[0].label)
+          } else if (data.label) {
+            setResolved(data.label)
+          } else if (data.labels && data.labels.length > 0) {
+            setResolved(data.labels[0])
+          }
+        }
+      })
+      .catch(err => console.error('Failed to resolve value', err))
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [value, fieldDefinitionId, fieldType, context])
+
+  if (!value) return <span className="text-muted-foreground italic">(empty)</span>
+
+  if (fieldType !== 'API_SELECT' && fieldType !== 'API_COMBINE') {
+    return <span>{value}</span>
+  }
+
+  if (loading) return <span className="animate-pulse">...</span>
+
+  return <span>{resolved || value}</span>
+}
+
+export default function TicketConversation({ activities, lastReadEvent, ticketId, ticket }: ConversationProps) {
+  // Create context from ticket custom fields
+  const context = ticket?.customFields?.reduce((acc: any, field: any) => {
+    if (field.key) acc[field.key] = field.value
+    return acc
+  }, {}) || {}
+
+
+
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -59,6 +124,8 @@ export default function TicketConversation({ activities, lastReadEvent, ticketId
         return <CheckCircle className="h-4 w-4" />
       case "CATEGORY_CHANGE":
         return <FolderTree className="h-4 w-4" />
+      case "CUSTOM_FIELD_CHANGE":
+        return <Pencil className="h-4 w-4" />
       default:
         return <Clock className="h-4 w-4" />
     }
@@ -226,8 +293,8 @@ export default function TicketConversation({ activities, lastReadEvent, ticketId
 
   const renderSystemActivity = (entry: ActivityLogEntry) => {
     let activityText = ""
-    let fromValue = ""
-    let toValue = ""
+    let fromValue: import('react').ReactNode = ""
+    let toValue: import('react').ReactNode = ""
     let icon = <Clock className="h-3 w-3" />
     let iconColor = "text-muted-foreground"
     let iconBg = "bg-muted"
@@ -265,10 +332,20 @@ export default function TicketConversation({ activities, lastReadEvent, ticketId
         iconColor = "text-blue-500 dark:text-blue-400"
         iconBg = "bg-blue-100 dark:bg-blue-900/30"
         break
+      case "CUSTOM_FIELD_CHANGE":
+        activityText = `updated ${entry.fieldLabel || "field"}`
+        fromValue = <ResolvedValueDisplay value={entry.from} fieldDefinitionId={entry.fieldDefinitionId} fieldType={entry.fieldType} context={entry.context || context} />
+        toValue = <ResolvedValueDisplay value={entry.to} fieldDefinitionId={entry.fieldDefinitionId} fieldType={entry.fieldType} context={entry.context || context} />
+        icon = <Pencil className="h-3 w-3" />
+        iconColor = "text-indigo-500 dark:text-indigo-400"
+        iconBg = "bg-indigo-100 dark:bg-indigo-900/30"
+        break
       default:
         icon = getActivityIcon(entry.type)
         iconColor = "text-muted-foreground"
         iconBg = "bg-muted"
+        fromValue = ""
+        toValue = ""
     }
 
     return (
@@ -284,11 +361,14 @@ export default function TicketConversation({ activities, lastReadEvent, ticketId
             <span className="font-semibold text-foreground text-xs">{entry.by?.name}</span>
             <span className="text-xs">{activityText}</span>
 
-            <div className="flex items-center gap-1.5 bg-muted/40 px-1.5 py-0.5 rounded border border-border">
-              <span className="text-xs font-medium text-muted-foreground line-through decoration-muted-foreground/50">{fromValue}</span>
-              <ArrowRight className="h-3 w-3 text-muted-foreground/50" />
-              <span className="text-xs font-medium text-foreground">{toValue}</span>
-            </div>
+            {/* Render changes only if from/to are present (or if custom field) */}
+            {(entry.type !== 'CUSTOM_FIELD_CHANGE' || (entry.from || entry.to)) && (
+              <div className="flex items-center gap-1.5 bg-muted/40 px-1.5 py-0.5 rounded border border-border">
+                <span className="text-xs font-medium text-muted-foreground line-through decoration-muted-foreground/50">{fromValue}</span>
+                <ArrowRight className="h-3 w-3 text-muted-foreground/50" />
+                <span className="text-xs font-medium text-foreground">{toValue}</span>
+              </div>
+            )}
           </div>
 
           <span className="text-[10px] text-muted-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
@@ -302,28 +382,126 @@ export default function TicketConversation({ activities, lastReadEvent, ticketId
   // Sort activities chronologically
   const sortedActivities = [...activities].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
 
-  if (sortedActivities.length === 0) {
+  // Helper to group activities
+  const groupActivities = (activities: ActivityLogEntry[]) => {
+    const grouped: ActivityLogEntry[][] = []
+    let currentGroup: ActivityLogEntry[] = []
+
+    activities.forEach((activity, index) => {
+      if (currentGroup.length === 0) {
+        currentGroup.push(activity)
+        return
+      }
+
+      const last = currentGroup[currentGroup.length - 1]
+
+      // Check if we can group:
+      // 1. Both are CUSTOM_FIELD_CHANGE
+      // 2. Same user (check createdBy or by)
+      // 3. Close in time (e.g. within 60 seconds)
+      const isCustomField = activity.type === 'CUSTOM_FIELD_CHANGE' && last.type === 'CUSTOM_FIELD_CHANGE'
+      const sameUser = (activity.by?.id || activity.createdBy?.id) === (last.by?.id || last.createdBy?.id)
+      const timeDiff = Math.abs(new Date(activity.at).getTime() - new Date(last.at).getTime())
+      const closeInTime = timeDiff < 60000 // 60 seconds
+
+      if (isCustomField && sameUser && closeInTime) {
+        currentGroup.push(activity)
+      } else {
+        grouped.push(currentGroup)
+        currentGroup = [activity]
+      }
+    })
+
+    if (currentGroup.length > 0) {
+      grouped.push(currentGroup)
+    }
+
+    return grouped
+  }
+
+  const groupedActivities = groupActivities(sortedActivities)
+
+  const renderGroupedActivity = (group: ActivityLogEntry[]) => {
+    // Single activity -> render normally
+    if (group.length === 1) {
+      return group[0].type === "THREAD"
+        ? renderThreadMessage(group[0], sortedActivities.findIndex(a => a.type === "THREAD") === sortedActivities.indexOf(group[0]))
+        : renderSystemActivity(group[0])
+    }
+
+    // Grouped Custom Fields
+    // We assume they are all CUSTOM_FIELD_CHANGE due to grouping logic
+    const first = group[0]
+    const entries = group
+
+    // Build Merged Context for this group
+    // Start with global context (current ticket state)
+    // Overlay the 'to' values from this group to simulate the state at that time (for the new values)
+    const groupContextOverride = entries.reduce((acc: any, entry) => {
+      // We need the key to add it to context. 
+      // Ideally the activity should have the key, but we often only have fieldDefinitionId.
+      // However, we can try to find the key from the global ticket definitions if available?
+      // Or simpler: If we have fieldDefinitionId, we can't easily map to key without lookup.
+      // BUT! resolved-value API primarily needs KEYS for dependencies if dependsOnFieldKey is used.
+
+      // Optimization: The 'context' we built earlier uses keys (e.g. 'organization'). 
+      // We need to map fieldDefinitionId -> key.
+      // Since we don't have that map easily here without traversing ticket.customFields, 
+      // let's try to look it up from the current ticket.customFields data which has { id, key, value }.
+      const fieldDef = ticket?.customFields?.find((f: any) => f.id === entry.fieldDefinitionId)
+      if (fieldDef && fieldDef.key) {
+        acc[fieldDef.key] = entry.to
+      }
+      return acc
+    }, {})
+
+    const mergedContext = { ...context, ...groupContextOverride }
+
     return (
-      <Card className="bg-card shadow-sm border-border">
-        <CardContent className="p-12 text-center">
-          <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-foreground mb-2">No conversation yet</h3>
-          <p className="text-muted-foreground">This ticket hasn't received any responses yet.</p>
-        </CardContent>
-      </Card>
+      <div className="relative pl-8 py-2">
+        {/* Group Icon (use Pencil for edits) */}
+        <div className="flex items-start space-x-3 text-sm group">
+          <div className={cn("h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 transition-colors bg-indigo-100 dark:bg-indigo-900/30 text-indigo-500 dark:text-indigo-400")}>
+            <Pencil className="h-3 w-3" />
+          </div>
+
+          <div className="flex flex-col gap-1 w-full max-w-2xl">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <span className="font-semibold text-foreground text-xs">{first.by?.name}</span>
+              <span className="text-xs">updated {group.length} fields</span>
+              <span className="text-[10px] text-muted-foreground/60">{formatDistanceToNow(new Date(first.at), { addSuffix: true })}</span>
+            </div>
+
+            <div className="bg-card/50 border border-border/50 rounded-md p-2 space-y-2 mt-1">
+              {entries.map((entry, idx) => (
+                <div key={idx} className="flex items-center gap-2 text-xs">
+                  <span className="text-muted-foreground w-1/3 truncate text-right">{entry.fieldLabel}:</span>
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                    <span className="font-medium text-muted-foreground line-through decoration-muted-foreground/50 truncate max-w-[40%]">
+                      <ResolvedValueDisplay value={entry.from} fieldDefinitionId={entry.fieldDefinitionId} fieldType={entry.fieldType} context={entry.context || context} />
+                    </span>
+                    <ArrowRight className="h-3 w-3 text-muted-foreground/50 flex-shrink-0" />
+                    <span className="font-medium text-foreground truncate">
+                      {/* Prefer entry.context (snapshot) if available, else fall back to mergedContext (grouping guess) */}
+                      <ResolvedValueDisplay value={entry.to} fieldDefinitionId={entry.fieldDefinitionId} fieldType={entry.fieldType} context={entry.context || mergedContext} />
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     )
   }
 
   return (
     <div className="space-y-4">
-      {sortedActivities.map((entry, index) => {
-        const isFirstThread = index === sortedActivities.findIndex(a => a.type === "THREAD")
-        return (
-          <div key={`${entry.type}-${entry.id}`}>
-            {entry.type === "THREAD" ? renderThreadMessage(entry, isFirstThread) : renderSystemActivity(entry)}
-          </div>
-        )
-      })}
+      {groupedActivities.map((group, index) => (
+        <div key={`group-${index}`}>
+          {renderGroupedActivity(group)}
+        </div>
+      ))}
     </div>
   )
 }

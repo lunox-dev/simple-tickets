@@ -84,6 +84,8 @@ interface TicketViewData {
     allowedAssignees: string[]
     claimType: 'CLAIM' | 'FORCE_CLAIM' | null
     canReply: boolean
+    canUpdateCustomFields: boolean
+    canUpdateFreshCustomFields: boolean
   }
 }
 
@@ -357,6 +359,7 @@ export default function TicketView({ ticketId }: TicketViewProps) {
               activities={activityLog}
               lastReadEvent={data.lastReadEvent}
               ticketId={ticketId}
+              ticket={ticket}
             />
 
             {showReplyForm && data.allowedActions.canReply && (
