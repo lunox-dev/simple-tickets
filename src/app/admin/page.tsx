@@ -4,8 +4,17 @@ import UserManagement from "@/components/admin/user-management"
 import TeamManagement from "@/components/admin/team-management"
 import UserTeamAssignment from "@/components/admin/user-team-assignment"
 import TicketPropertiesManagement from "@/components/admin/ticket-properties-management"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions"
+import { redirect } from "next/navigation"
 
-export default function AdminPage() {
+export default async function AdminPage() {
+  const session = await getServerSession(authOptions)
+
+  if (!session) {
+    redirect("/api/auth/signin?callbackUrl=/admin")
+  }
+
   return (
     <div className="container mx-auto p-4 md:p-8 max-w-7xl">
       <Card className="w-full">

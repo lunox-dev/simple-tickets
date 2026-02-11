@@ -6,8 +6,10 @@ import { StatsOverview } from "./stats-overview"
 import { StatsCharts } from "./stats-charts"
 import { LatestTicketsList } from "./latest-tickets"
 import { DashboardFilterState, DashboardStats } from "./types"
-import { Loader2 } from "lucide-react"
+import { Loader2, Plus, Ticket } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
 
 interface DashboardContentProps {
     statuses: { id: number; name: string; color: string }[]
@@ -54,6 +56,18 @@ export function DashboardContent({ statuses, priorities }: DashboardContentProps
             <div className="flex items-center justify-between space-y-2">
                 <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
                 <div className="flex items-center space-x-2">
+                    <Link href="/tickets">
+                        <Button variant="outline" size="sm" className="hidden sm:flex">
+                            <Ticket className="mr-2 h-4 w-4" />
+                            View Tickets
+                        </Button>
+                    </Link>
+                    <Link href="/ticket/new">
+                        <Button size="sm" className="hidden sm:flex">
+                            <Plus className="mr-2 h-4 w-4" />
+                            New Ticket
+                        </Button>
+                    </Link>
                     <DashboardFilter
                         statuses={statuses}
                         priorities={priorities}
