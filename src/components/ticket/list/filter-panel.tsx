@@ -59,7 +59,6 @@ export function FilterPanel({
       fromDate: null,
       toDate: null,
       includeUserTeamsForTeams: false,
-      includeUserTeamsForTeams: false,
       includeUserTeamsForCreatedByTeams: false,
       customFields: {}
     })
