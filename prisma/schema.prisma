@@ -282,6 +282,7 @@ model TicketFieldDefinition {
   apiConfig      Json? /// { url, method, headers, ... }
   activeInCreate Boolean @default(true) /// available_in_new_ticket
   activeInRead   Boolean @default(true) /// available_in_read_ticket
+  displayOnList  Boolean @default(false)
 
   applicableCategory   TicketCategory? @relation(fields: [applicableCategoryId], references: [id])
   applicableCategoryId Int?
