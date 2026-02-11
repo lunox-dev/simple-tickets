@@ -23,6 +23,7 @@ export function FieldEditor({ categoryId, defaultGroupId, onSaved, trigger, init
     const [multiSelect, setMultiSelect] = useState(false)
     const [activeInCreate, setActiveInCreate] = useState(true)
     const [activeInRead, setActiveInRead] = useState(true)
+    const [displayOnList, setDisplayOnList] = useState(false)
     const [priority, setPriority] = useState('0')
     const [apiConfig, setApiConfig] = useState<any>(null)
     const [groupId, setGroupId] = useState<string>(defaultGroupId ? String(defaultGroupId) : 'none')
@@ -40,6 +41,7 @@ export function FieldEditor({ categoryId, defaultGroupId, onSaved, trigger, init
             setMultiSelect(f.multiSelect)
             setActiveInCreate(f.activeInCreate !== false) // default true
             setActiveInRead(f.activeInRead !== false)
+            setDisplayOnList(f.displayOnList || false)
             setPriority(String(f.priority || 0))
             setApiConfig(f.apiConfig)
             if (f.ticketFieldGroup) {
@@ -58,6 +60,7 @@ export function FieldEditor({ categoryId, defaultGroupId, onSaved, trigger, init
             setMultiSelect(false)
             setActiveInCreate(true)
             setActiveInRead(true)
+            setDisplayOnList(false)
             setPriority('0')
             setApiConfig(null)
             if (defaultGroupId) setGroupId(String(defaultGroupId))
@@ -94,7 +97,8 @@ export function FieldEditor({ categoryId, defaultGroupId, onSaved, trigger, init
                 apiConfig: type.startsWith('API') ? apiConfig : undefined,
                 ticketFieldGroupId: groupId !== 'none' ? parseInt(groupId) : undefined,
                 activeInCreate,
-                activeInRead
+                activeInRead,
+                displayOnList
             }
 
             if (isEdit) {
@@ -206,6 +210,12 @@ export function FieldEditor({ categoryId, defaultGroupId, onSaved, trigger, init
                             <Checkbox id="air" checked={activeInRead} onCheckedChange={(c: any) => setActiveInRead(!!c)} />
                             <Label htmlFor="air">Show in View</Label>
                         </div>
+                        {type === 'API_SELECT' && (
+                            <div className="flex items-center space-x-2 border p-3 rounded-md">
+                                <Checkbox id="dol" checked={displayOnList} onCheckedChange={(c: any) => setDisplayOnList(!!c)} />
+                                <Label htmlFor="dol">Show in Ticket List</Label>
+                            </div>
+                        )}
                     </div>
 
                     {type.startsWith('API') && (

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, type ChangeEvent, type FormEvent } from "react"
-import { ApiSelect } from "./api-select"
+import { ApiSelect } from "@/components/ticket/common/api-select"
 import type { Content } from "@tiptap/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

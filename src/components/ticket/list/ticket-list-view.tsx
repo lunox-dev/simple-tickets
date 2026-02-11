@@ -14,10 +14,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Loader2, MoreHorizontal, Plus, RefreshCw, Eye, AlertCircle, MessageSquare, Clock, Edit } from "lucide-react"
+import { Loader2, MoreHorizontal, Plus, RefreshCw, Eye, AlertCircle, MessageSquare, Clock, Edit, Settings } from "lucide-react"
 import { formatDistanceToNow, format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { FilterPanel } from "./filter-panel"
+import { ColumnConfig } from "./column-config"
 import type {
   TicketListItem,
   Priority,
@@ -29,6 +30,52 @@ import type {
   FlatCategory,
   FlatEntity,
 } from "./types"
+
+type ColumnVisibility = {
+  [key: string]: boolean
+}
+
+const STORAGE_KEY_COLUMNS = "ticket-list-columns"
+const STORAGE_KEY_FILTERS = "ticket-list-filters"
+
+// Helper to interact with resolve-value API
+const resolveValue = async (fieldDefId: number, value: string): Promise<string> => {
+  if (!value) return '-'
+  try {
+    const res = await fetch(`/api/ticket/field/resolve-value`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fieldDefinitionId: fieldDefId,
+        value: value,
+        context: {} // Empty context for list view for now
+      })
+    })
+    if (!res.ok) return value
+    const data = await res.json()
+    // Response format: {"items":[{"value":"17","label":"Apeksha Cancer Hospital","metadata":{}}]}
+    if (data.items && data.items.length > 0) {
+      return data.items[0].label
+    }
+    return value
+  } catch (e) {
+    return value
+  }
+}
+
+const defaultFilters: FilterState = {
+  search: "",
+  statuses: [],
+  priorities: [],
+  categories: [],
+  assignedEntities: [],
+  createdByEntities: [],
+  fromDate: null,
+  toDate: null,
+  includeUserTeamsForTeams: false,
+  includeUserTeamsForCreatedByTeams: false,
+  customFields: {},
+}
 
 export function TicketListView() {
   const router = useRouter()
@@ -45,21 +92,73 @@ export function TicketListView() {
   const [entities, setEntities] = useState<Entity[]>([])
   const [flatEntities, setFlatEntities] = useState<FlatEntity[]>([])
 
-  // Filter state
-  const [filters, setFilters] = useState<FilterState>({
-    search: "",
-    statuses: [],
-    priorities: [],
-    categories: [],
-    assignedEntities: [],
-    createdByEntities: [],
-    fromDate: null,
-    toDate: null,
-    includeUserTeamsForTeams: false,
-    includeUserTeamsForCreatedByTeams: false,
+  // Custom fields to display as columns
+  const [displayFields, setDisplayFields] = useState<any[]>([])
+  // Cache for resolved values: { [fieldDefId:value]: label }
+  const [resolvedValues, setResolvedValues] = useState<Record<string, string>>({})
+
+  // Column visibility configuration
+  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibility>({
+    id: true, // Mandatory
+    status: true,
+    priority: true,
+    subject: true,
+    requester: true,
+    assignedTo: true,
+    updated: true,
   })
+  const [showColumnConfig, setShowColumnConfig] = useState(false)
+
+  // Filter state
+  const [filters, setFilters] = useState<FilterState>(defaultFilters)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
+  const [isLoaded, setIsLoaded] = useState(false)
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    // Load column visibility
+    try {
+      const savedColumns = localStorage.getItem(STORAGE_KEY_COLUMNS)
+      if (savedColumns) {
+        setColumnVisibility(JSON.parse(savedColumns))
+      }
+    } catch (e) {
+      console.error("Failed to load columns from storage", e)
+    }
+
+    // Load filters
+    try {
+      const savedFilters = localStorage.getItem(STORAGE_KEY_FILTERS)
+      if (savedFilters) {
+        const parsed = JSON.parse(savedFilters)
+
+        // Restore Date objects from strings
+        if (parsed.fromDate) parsed.fromDate = new Date(parsed.fromDate)
+        if (parsed.toDate) parsed.toDate = new Date(parsed.toDate)
+
+        setFilters(parsed)
+      }
+    } catch (e) {
+      console.error("Failed to load filters from storage", e)
+    }
+
+    setIsLoaded(true)
+  }, [])
+
+  // Save column visibility when it changes
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem(STORAGE_KEY_COLUMNS, JSON.stringify(columnVisibility))
+    }
+  }, [columnVisibility, isLoaded])
+
+  // Save filters when they change
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem(STORAGE_KEY_FILTERS, JSON.stringify(filters))
+    }
+  }, [filters, isLoaded])
 
   // Flatten categories for display
   const flattenCategories = (categories: Category[], parentPath: string[] = [], level = 0): FlatCategory[] => {
@@ -102,11 +201,12 @@ export function TicketListView() {
   useEffect(() => {
     const fetchReferenceData = async () => {
       try {
-        const [priRes, statRes, catRes, entRes] = await Promise.all([
+        const [priRes, statRes, catRes, entRes, fieldRes] = await Promise.all([
           fetch("/api/ticket/priority/list"),
           fetch("/api/ticket/status/list"),
           fetch("/api/ticket/category/list"),
           fetch("/api/entity/list"),
+          fetch("/api/ticket/field/list?displayOnList=true") // Fetch all fields to find displayOnList ones
         ])
 
         if (priRes.ok) setPriorities((await priRes.json()).priorities || [])
@@ -121,6 +221,14 @@ export function TicketListView() {
           setEntities(entData)
           setFlatEntities(flattenEntities(entData))
         }
+
+        if (fieldRes.ok) {
+          const allFields = await fieldRes.json()
+          // Filter for displayOnList = true
+          // The API response structure: "activeInRead", "displayOnList", etc.
+          const filterableFields = allFields.filter((f: any) => f.displayOnList === true)
+          setDisplayFields(filterableFields)
+        }
       } catch (err) {
         console.warn("Failed to fetch reference data:", err)
         setError("Could not load filter data. Some filters may not work.")
@@ -128,7 +236,47 @@ export function TicketListView() {
     }
 
     fetchReferenceData()
+    fetchReferenceData()
   }, [])
+
+  // Update displayFields effect to preserve user preferences
+  useEffect(() => {
+    if (displayFields.length > 0 && isLoaded) {
+      const storedColumnsReq = localStorage.getItem(STORAGE_KEY_COLUMNS)
+      if (storedColumnsReq) {
+        // Using stored columns, just verify we have entries for new fields
+        const stored = JSON.parse(storedColumnsReq)
+        const newVisibility = { ...stored }
+        let changed = false
+
+        displayFields.forEach((f: any) => {
+          const key = `field_${f.id}`
+          if (!(key in newVisibility)) {
+            newVisibility[key] = true
+            changed = true
+          }
+        })
+
+        if (changed) {
+          setColumnVisibility(newVisibility)
+        }
+      } else {
+        // First time loading fields with no storage, set defaults
+        const newVisibility = { ...columnVisibility }
+        let changed = false
+        displayFields.forEach((f: any) => {
+          const key = `field_${f.id}`
+          if (!(key in newVisibility)) {
+            newVisibility[key] = true
+            changed = true
+          }
+        })
+        if (changed) {
+          setColumnVisibility(newVisibility)
+        }
+      }
+    }
+  }, [displayFields, isLoaded])
 
   // Fetch tickets
   const fetchTickets = useCallback(async () => {
@@ -151,6 +299,12 @@ export function TicketListView() {
       if (filters.includeUserTeamsForTeams) params.set("includeUserTeamsForTeams", "1")
       if (filters.includeUserTeamsForCreatedByTeams) params.set("includeUserTeamsForCreatedByTeams", "1")
 
+      if (filters.customFields) {
+        Object.entries(filters.customFields).forEach(([fid, val]) => {
+          if (val) params.append(`field_${fid}`, val)
+        })
+      }
+
       const response = await fetch(`/api/ticket/list?${params.toString()}`)
       if (!response.ok) throw new Error(`Failed to fetch tickets: ${response.statusText}`)
 
@@ -169,6 +323,29 @@ export function TicketListView() {
       }
 
       setTickets(ticketData)
+
+      const valuesToResolve = new Set<string>()
+
+      ticketData.forEach((t: any) => {
+        if (t.customFields) {
+          t.customFields.forEach((cf: any) => {
+            if (cf.value) {
+              valuesToResolve.add(`${cf.fieldDefinitionId}:${cf.value}`)
+            }
+          })
+        }
+      })
+
+      const newResolved: Record<string, string> = {}
+      await Promise.all(Array.from(valuesToResolve).map(async (key) => {
+        const [fidStr, val] = key.split(':')
+        const fid = parseInt(fidStr)
+        const resolved = await resolveValue(fid, val)
+        newResolved[key] = resolved
+      }))
+
+      setResolvedValues(prev => ({ ...prev, ...newResolved }))
+
       setPagination({
         page: data.page,
         pageSize: data.pageSize,
@@ -183,11 +360,13 @@ export function TicketListView() {
     } finally {
       setIsLoading(false)
     }
-  }, [currentPage, pageSize, filters])
+  }, [currentPage, pageSize, filters, isLoaded]) // Added isLoaded dependency to prevent fetch before storage load
 
   useEffect(() => {
-    fetchTickets()
-  }, [fetchTickets])
+    if (isLoaded) {
+      fetchTickets()
+    }
+  }, [fetchTickets, isLoaded])
 
   const getStatusName = (statusId: number) => statuses.find((s) => s.id === statusId)?.name || "Unknown"
   const getStatusColor = (statusId: number) => statuses.find((s) => s.id === statusId)?.color || "#808080"
@@ -214,7 +393,8 @@ export function TicketListView() {
           priorities={priorities}
           flatCategories={flatCategories}
           flatEntities={flatEntities}
-          onFilterChange={() => setCurrentPage(1)}
+          customFieldDefinitions={displayFields} // Passing the fetched definitions
+          onFilterChange={fetchTickets}
         />
 
         <main className="flex-1 flex flex-col overflow-hidden">
@@ -229,7 +409,14 @@ export function TicketListView() {
                 )}
               </div>
               <div className="flex items-center space-x-3">
-                <Button variant="outline" size="sm" onClick={fetchTickets} disabled={isLoading} className="border-border hover:bg-muted">
+                <ColumnConfig
+                  columnVisibility={columnVisibility}
+                  onVisibilityChange={setColumnVisibility}
+                  displayFields={displayFields}
+                  isOpen={showColumnConfig}
+                  onOpenChange={setShowColumnConfig}
+                />
+                <Button variant="outline" size="sm" onClick={fetchTickets} disabled={isLoading} className="border-border hover:bg-muted bg-transparent">
                   <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
                   Refresh
                 </Button>
@@ -263,18 +450,10 @@ export function TicketListView() {
                   <p className="text-muted-foreground max-w-sm mb-6">
                     No tickets matched your search criteria. Try adjusting your filters or create a new ticket.
                   </p>
-                  <Button onClick={() => setFilters({
-                    search: "",
-                    statuses: [],
-                    priorities: [],
-                    categories: [],
-                    assignedEntities: [],
-                    createdByEntities: [],
-                    fromDate: null,
-                    toDate: null,
-                    includeUserTeamsForTeams: false,
-                    includeUserTeamsForCreatedByTeams: false,
-                  })}
+                  <Button onClick={() => {
+                    setFilters(defaultFilters)
+                    localStorage.removeItem(STORAGE_KEY_FILTERS)
+                  }}
                     variant="outline">
                     Clear all filters
                   </Button>
@@ -283,13 +462,18 @@ export function TicketListView() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
-                      <TableHead className="w-[80px]">ID</TableHead>
-                      <TableHead className="w-[140px]">Status</TableHead>
-                      <TableHead className="w-[120px]">Priority</TableHead>
-                      <TableHead className="min-w-[300px]">Subject</TableHead>
-                      <TableHead className="w-[180px]">Requester</TableHead>
-                      <TableHead className="w-[180px]">Assigned To</TableHead>
-                      <TableHead className="w-[140px] text-right">Updated</TableHead>
+                      {columnVisibility.id && <TableHead className="w-[80px] border-r border-border">ID</TableHead>}
+                      {columnVisibility.status && <TableHead className="w-[140px] border-r border-border">Status</TableHead>}
+                      {columnVisibility.priority && <TableHead className="w-[120px] border-r border-border">Priority</TableHead>}
+                      {columnVisibility.subject && <TableHead className="min-w-[300px] border-r border-border">Subject</TableHead>}
+                      {columnVisibility.requester && <TableHead className="w-[180px] border-r border-border">Requester</TableHead>}
+                      {columnVisibility.assignedTo && <TableHead className="w-[180px] border-r border-border">Assigned To</TableHead>}
+                      {displayFields.map((f, idx) => (
+                        columnVisibility[`field_${f.id}`] && (
+                          <TableHead key={f.id} className="min-w-[120px] border-r border-border">{f.label}</TableHead>
+                        )
+                      ))}
+                      {columnVisibility.updated && <TableHead className="w-[140px] border-r border-border text-right">Updated</TableHead>}
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -300,64 +484,93 @@ export function TicketListView() {
                         className="cursor-pointer hover:bg-muted/50 transition-colors"
                         onClick={() => handleTicketClick(ticket.id)}
                       >
-                        <TableCell className="font-mono text-muted-foreground font-medium">#{ticket.id}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="secondary"
-                            className="text-xs font-semibold px-2.5 py-0.5 rounded-full border-0"
-                            style={{
-                              backgroundColor: `${getStatusColor(ticket.currentStatusId)}20`, // 12% opacity background
-                              color: getStatusColor(ticket.currentStatusId),
-                              boxShadow: `0 0 0 1px ${getStatusColor(ticket.currentStatusId)}40 inset`
-                            }}
-                          >
-                            {getStatusName(ticket.currentStatusId)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="secondary"
-                            className="text-xs font-semibold px-2.5 py-0.5 rounded-full border-0"
-                            style={{
-                              backgroundColor: `${getPriorityColor(ticket.currentPriorityId)}20`,
-                              color: getPriorityColor(ticket.currentPriorityId),
-                              boxShadow: `0 0 0 1px ${getPriorityColor(ticket.currentPriorityId)}40 inset`
-                            }}
-                          >
-                            {getPriorityName(ticket.currentPriorityId)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col max-w-[500px]">
-                            <span className="font-medium text-foreground truncate block mb-0.5">
-                              {ticket.title}
-                            </span>
-                            <span className="text-xs text-muted-foreground truncate block font-normal">
-                              {ticket.body}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm rounded hover:bg-muted px-2 py-1 -ml-2 transition-colors">
-                              {ticket.createdBy.name}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {ticket.currentAssignedTo ? (
-                              <span className="text-sm text-foreground bg-muted/50 px-2 py-1 rounded">
-                                {ticket.currentAssignedTo.name}
+                        {columnVisibility.id && <TableCell className="font-mono text-muted-foreground font-medium border-r border-border">#{ticket.id}</TableCell>}
+                        {columnVisibility.status && (
+                          <TableCell className="border-r border-border">
+                            <Badge
+                              variant="secondary"
+                              className="text-xs font-semibold px-2.5 py-0.5 rounded-full border-0"
+                              style={{
+                                backgroundColor: `${getStatusColor(ticket.currentStatusId)}20`, // 12% opacity background
+                                color: getStatusColor(ticket.currentStatusId),
+                                boxShadow: `0 0 0 1px ${getStatusColor(ticket.currentStatusId)}40 inset`
+                              }}
+                            >
+                              {getStatusName(ticket.currentStatusId)}
+                            </Badge>
+                          </TableCell>
+                        )}
+                        {columnVisibility.priority && (
+                          <TableCell className="border-r border-border">
+                            <Badge
+                              variant="secondary"
+                              className="text-xs font-semibold px-2.5 py-0.5 rounded-full border-0"
+                              style={{
+                                backgroundColor: `${getPriorityColor(ticket.currentPriorityId)}20`,
+                                color: getPriorityColor(ticket.currentPriorityId),
+                                boxShadow: `0 0 0 1px ${getPriorityColor(ticket.currentPriorityId)}40 inset`
+                              }}
+                            >
+                              {getPriorityName(ticket.currentPriorityId)}
+                            </Badge>
+                          </TableCell>
+                        )}
+                        {columnVisibility.subject && (
+                          <TableCell className="border-r border-border">
+                            <div className="flex flex-col max-w-[500px]">
+                              <span className="font-medium text-foreground truncate block mb-0.5">
+                                {ticket.title}
                               </span>
-                            ) : (
-                              <span className="text-sm text-muted-foreground italic">Unassigned</span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right text-xs text-muted-foreground whitespace-nowrap">
-                          {formatDistanceToNow(new Date(ticket.updatedAt), { addSuffix: true })}
-                        </TableCell>
+                              <span className="text-xs text-muted-foreground truncate block font-normal">
+                                {ticket.body}
+                              </span>
+                            </div>
+                          </TableCell>
+                        )}
+                        {columnVisibility.requester && (
+                          <TableCell className="border-r border-border">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm rounded hover:bg-muted px-2 py-1 -ml-2 transition-colors">
+                                {ticket.createdBy.name}
+                              </span>
+                            </div>
+                          </TableCell>
+                        )}
+                        {columnVisibility.assignedTo && (
+                          <TableCell className="border-r border-border">
+                            <div className="flex items-center gap-2">
+                              {ticket.currentAssignedTo ? (
+                                <span className="text-sm text-foreground bg-muted/50 px-2 py-1 rounded">
+                                  {ticket.currentAssignedTo.name}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-muted-foreground italic">Unassigned</span>
+                              )}
+                            </div>
+                          </TableCell>
+                        )}
+
+                        {displayFields.map((f, idx) => {
+                          // Find value for this field in ticket
+                          // ticket type assumes customFields exists now
+                          const cf = (ticket as any).customFields?.find((c: any) => c.fieldDefinitionId === f.id)
+                          const rawVal = cf?.value
+                          const resolved = rawVal ? resolvedValues[`${f.id}:${rawVal}`] : '-'
+                          return (
+                            columnVisibility[`field_${f.id}`] && (
+                              <TableCell key={f.id} className="text-sm border-r border-border">
+                                {resolved || '-'}
+                              </TableCell>
+                            )
+                          )
+                        })}
+
+                        {columnVisibility.updated && (
+                          <TableCell className="text-right text-xs text-muted-foreground whitespace-nowrap border-r border-border">
+                            {formatDistanceToNow(new Date(ticket.updatedAt), { addSuffix: true })}
+                          </TableCell>
+                        )}
+
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -413,7 +626,6 @@ export function TicketListView() {
                     <span aria-hidden>&larr;</span>
                   </Button>
                   <div className="flex items-center gap-1">
-                    {/* Simplified Pagination: Just generic Prev/Next for now to match shadcn style */}
                     <span className="text-sm px-2">Page {currentPage} of {pagination.totalPages}</span>
                   </div>
                   <Button

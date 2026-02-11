@@ -1,9 +1,9 @@
 // src/app/api/ticket/list/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession }        from 'next-auth/next'
+import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
-import { prisma }                  from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
 import { getAccessibleTicketsByUser } from '@/lib/access-tickets'
 
 export async function GET(req: NextRequest) {
@@ -18,14 +18,14 @@ export async function GET(req: NextRequest) {
   }
 
   // 3) Parse filters & pagination (moved up)
-  const qp       = req.nextUrl.searchParams
-  const page     = Math.max(1, parseInt(qp.get('page')     || '1',   10))
+  const qp = req.nextUrl.searchParams
+  const page = Math.max(1, parseInt(qp.get('page') || '1', 10))
   const pageSize = Math.min(500, Math.max(1, parseInt(qp.get('pageSize') || '100', 10)))
   const fromDate = qp.get('fromDate') ? new Date(qp.get('fromDate')!) : null
-  const toDate   = qp.get('toDate')   ? new Date(qp.get('toDate')!)   : null
-  const sort     = qp.get('sort')?.toLowerCase() === 'asc' ? 'asc' : 'desc'
+  const toDate = qp.get('toDate') ? new Date(qp.get('toDate')!) : null
+  const sort = qp.get('sort')?.toLowerCase() === 'asc' ? 'asc' : 'desc'
 
-  const statusIds   = qp.getAll('status').map(Number).filter(Boolean)
+  const statusIds = qp.getAll('status').map(Number).filter(Boolean)
   const priorityIds = qp.getAll('priority').map(Number).filter(Boolean)
 
   // --- CATEGORY FILTERING ---
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     const childrenMap: Record<number, number[]> = {}
     allCats.forEach(c => {
       const pid = c.parentId ?? 0
-      ;(childrenMap[pid] ||= []).push(c.id)
+        ; (childrenMap[pid] ||= []).push(c.id)
     })
     // DFS to expand all selected categories to include all descendants
     const expanded = new Set<number>()
@@ -109,15 +109,15 @@ export async function GET(req: NextRequest) {
   }
 
   const fieldFilters: Array<{ ticketFieldDefinitionId: number; value: string }> = []
-  for (const [key,val] of qp.entries()) {
+  for (const [key, val] of qp.entries()) {
     if (key.startsWith('field_')) {
-      const defId = parseInt(key.slice(6),10)
+      const defId = parseInt(key.slice(6), 10)
       if (!isNaN(defId)) fieldFilters.push({ ticketFieldDefinitionId: defId, value: val })
     }
   }
 
   // 1) Which tickets can this user see?
-  const accessResult        = await getAccessibleTicketsByUser(userId, session.user, 1000)
+  const accessResult = await getAccessibleTicketsByUser(userId, session.user, 1000)
   const accessibleTicketIds = accessResult.tickets.map(t => t.ticketId)
   if (accessResult.tickets.length === 0) {
     // User has permission, but no tickets exist or are accessible
@@ -140,22 +140,22 @@ export async function GET(req: NextRequest) {
       read: false,
       event: {
         OR: [
-          { onThread:           { ticketId: { in: accessibleTicketIds } } },
+          { onThread: { ticketId: { in: accessibleTicketIds } } },
           { onAssignmentChange: { ticketId: { in: accessibleTicketIds } } },
-          { onPriorityChange:   { ticketId: { in: accessibleTicketIds } } },
-          { onStatusChange:     { ticketId: { in: accessibleTicketIds } } },
-          { onCategoryChange:   { ticketId: { in: accessibleTicketIds } } },
+          { onPriorityChange: { ticketId: { in: accessibleTicketIds } } },
+          { onStatusChange: { ticketId: { in: accessibleTicketIds } } },
+          { onCategoryChange: { ticketId: { in: accessibleTicketIds } } },
         ]
       }
     },
     select: {
       event: {
         select: {
-          onThread:           { select: { ticketId: true } },
+          onThread: { select: { ticketId: true } },
           onAssignmentChange: { select: { ticketId: true } },
-          onPriorityChange:   { select: { ticketId: true } },
-          onStatusChange:     { select: { ticketId: true } },
-          onCategoryChange:   { select: { ticketId: true } },
+          onPriorityChange: { select: { ticketId: true } },
+          onStatusChange: { select: { ticketId: true } },
+          onCategoryChange: { select: { ticketId: true } },
         }
       }
     }
@@ -181,10 +181,10 @@ export async function GET(req: NextRequest) {
   if (fromDate || toDate) {
     const dt: any = {}
     if (fromDate) dt.gte = fromDate
-    if (toDate)   dt.lte = toDate
+    if (toDate) dt.lte = toDate
     where.AND.push({ createdAt: dt })
   }
-  if (statusIds.length)   where.AND.push({ currentStatusId:   { in: statusIds } })
+  if (statusIds.length) where.AND.push({ currentStatusId: { in: statusIds } })
   if (priorityIds.length) where.AND.push({ currentPriorityId: { in: priorityIds } })
   if (expandedAssignedIds.length) where.AND.push({ currentAssignedToId: { in: expandedAssignedIds } })
   if (expandedCategoryIds.length) where.AND.push({ currentCategoryId: { in: expandedCategoryIds } })
@@ -194,30 +194,30 @@ export async function GET(req: NextRequest) {
       fieldValues: {
         some: {
           ticketFieldDefinitionId: f.ticketFieldDefinitionId,
-          value:                   f.value
+          value: f.value
         }
       }
     })
   }
 
   // 5) Fetch count + page of tickets
-  const [ total, raw ] = await prisma.$transaction([
+  const [total, raw] = await prisma.$transaction([
     prisma.ticket.count({ where }),
     prisma.ticket.findMany({
       where,
       orderBy: { updatedAt: 'desc' }, // Always newest updated at top
-      skip:    (page - 1) * pageSize,
-      take:    pageSize,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
       select: {
-        id:    true,
+        id: true,
         title: true,
         threads: { orderBy: { createdAt: 'asc' }, take: 1, select: { body: true } },
-        currentStatus:   { select: { id: true } },
+        currentStatus: { select: { id: true } },
         currentPriority: { select: { id: true } },
         currentAssignedTo: {
           select: {
             id: true,
-            team:     { select: { name: true } },
+            team: { select: { name: true } },
             userTeam: {
               select: {
                 user: { select: { displayName: true } },
@@ -229,7 +229,7 @@ export async function GET(req: NextRequest) {
         createdBy: {
           select: {
             id: true,
-            team:     { select: { name: true } },
+            team: { select: { name: true } },
             userTeam: {
               select: {
                 user: { select: { displayName: true } },
@@ -239,7 +239,27 @@ export async function GET(req: NextRequest) {
           }
         },
         createdAt: true,
-        updatedAt: true
+        updatedAt: true,
+        fieldValues: {
+          where: {
+            ticketFieldDefinition: {
+              displayOnList: true,
+              activeInRead: true
+            }
+          },
+          select: {
+            id: true,
+            value: true,
+            ticketFieldDefinitionId: true,
+            ticketFieldDefinition: {
+              select: {
+                id: true,
+                key: true,
+                label: true
+              }
+            }
+          }
+        }
       }
     })
   ])
@@ -251,33 +271,40 @@ export async function GET(req: NextRequest) {
       : `${e.userTeam.user.displayName} (${e.userTeam.team.name})`
 
   const items = raw.map(t => ({
-    id:                t.id,
-    title:             t.title,
-    body:              t.threads[0]?.body.slice(0,250) ?? '',
-    currentStatusId:   t.currentStatus.id,
+    id: t.id,
+    title: t.title,
+    body: t.threads[0]?.body.slice(0, 250) ?? '',
+    currentStatusId: t.currentStatus.id,
     currentPriorityId: t.currentPriority.id,
     currentAssignedTo: t.currentAssignedTo
       ? { entityId: t.currentAssignedTo.id, name: formatEntity(t.currentAssignedTo) }
       : null,
     createdBy: {
       entityId: t.createdBy.id,
-      name:     formatEntity(t.createdBy)
+      name: formatEntity(t.createdBy)
     },
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
-    unread:    unreadByTicket.has(t.id)
+    unread: unreadByTicket.has(t.id),
+    customFields: t.fieldValues.map(fv => ({
+      id: fv.id,
+      fieldDefinitionId: fv.ticketFieldDefinitionId,
+      key: fv.ticketFieldDefinition.key,
+      label: fv.ticketFieldDefinition.label,
+      value: fv.value
+    }))
   }))
 
   // 7) Return paginated response
-  const totalPages  = Math.ceil(total / pageSize)
+  const totalPages = Math.ceil(total / pageSize)
   const itemsOnPage = items.length
-  const startIndex  = (page - 1) * pageSize + 1
-  const endIndex    = startIndex + itemsOnPage - 1
+  const startIndex = (page - 1) * pageSize + 1
+  const endIndex = startIndex + itemsOnPage - 1
 
   return NextResponse.json({
     page,
     pageSize,
-    totalItems:  total,
+    totalItems: total,
     totalPages,
     itemsOnPage,
     startIndex,

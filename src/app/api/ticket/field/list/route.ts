@@ -31,9 +31,101 @@ export async function GET(req: NextRequest) {
   // 3. Parse query params
   const catParam = req.nextUrl.searchParams.get('categoryId')
   const groupParam = req.nextUrl.searchParams.get('groupId')
+  const showOnList = req.nextUrl.searchParams.get('displayOnList') === 'true'
 
   const categoryId = catParam ? parseInt(catParam, 10) : NaN
   const groupId = groupParam ? parseInt(groupParam, 10) : NaN
+
+  // Handle displayOnList request (Global list of columns)
+  if (showOnList) {
+    let where: any = { displayOnList: true, activeInRead: true }
+
+    // If restricted user, filter by accessible categories
+    if (!canViewAny) {
+      // a) load all categories for tree
+      const allCats = await prisma.ticketCategory.findMany({ select: { id: true, parentId: true } })
+      // b) build parent→children map
+      const childrenMap: Record<number, number[]> = {}
+      allCats.forEach(c => {
+        const pid = c.parentId ?? 0
+          ; (childrenMap[pid] ||= []).push(c.id)
+      })
+      // c) find direct roots user has via availabilityTeams
+      const teamIds = userTeams.map(t => t.teamId).filter(id => id !== undefined && id !== null)
+      const direct = await prisma.ticketCategoryAvailabilityTeam.findMany({
+        where: { teamId: { in: teamIds } },
+        select: { ticketCategoryId: true }
+      })
+      const allowed = new Set<number>(direct.map(r => r.ticketCategoryId))
+      // d) DFS to include all descendants
+      const stack = [...allowed]
+      while (stack.length) {
+        const cur = stack.pop()!
+        for (const child of childrenMap[cur] || []) {
+          if (!allowed.has(child)) {
+            allowed.add(child)
+            stack.push(child)
+          }
+        }
+      }
+
+      const allowedIds = Array.from(allowed)
+
+      // Filter fields that are applicable to these categories OR global fields (if any? usually fields belong to group or category)
+      // Assuming fields must belong to group or category.
+      // We look for fields where applicableCategoryId is in allowed 
+      // OR ticketFieldGroup is linked to allowed categories.
+
+      // Find groups linked to allowed categories
+      const allowedGroups = await prisma.ticketFieldGroupCategory.findMany({
+        where: { ticketCategoryId: { in: allowedIds } },
+        select: { ticketFieldGroupId: true }
+      })
+      const allowedGroupIds = allowedGroups.map(g => g.ticketFieldGroupId)
+
+      where.OR = [
+        { applicableCategoryId: { in: allowedIds } },
+        { ticketFieldGroupId: { in: allowedGroupIds } }
+      ]
+    }
+
+    const defs = await prisma.ticketFieldDefinition.findMany({
+      where,
+      select: {
+        id: true,
+        label: true,
+        key: true,
+        regex: true,
+        requiredAtCreation: true,
+        type: true,
+        multiSelect: true,
+        activeInCreate: true,
+        activeInRead: true,
+        displayOnList: true,
+        apiConfig: true,
+        priority: true,
+        ticketFieldGroup: { select: { id: true, name: true } }
+      },
+      orderBy: { priority: 'asc' }
+    })
+
+    // Return formatted
+    return NextResponse.json(defs.map(def => {
+      const config = def.apiConfig as any
+      return {
+        ...def,
+        required: def.requiredAtCreation,
+        requiredAtCreation: undefined,
+        displayOnList: (def as any).displayOnList,
+        apiConfig: config ? {
+          dependsOnFieldKey: config.dependsOnFieldKey,
+          dependencyParam: config.dependencyParam,
+          dependencyMode: config.dependencyMode,
+          nestedPath: config.nestedPath
+        } : undefined
+      }
+    }))
+  }
 
   if (isNaN(categoryId) && isNaN(groupId)) {
     return NextResponse.json({ error: 'categoryId OR groupId (numeric) is required' }, { status: 400 })
@@ -61,6 +153,7 @@ export async function GET(req: NextRequest) {
         regex: true,
         activeInCreate: true,
         activeInRead: true,
+        displayOnList: true,
         apiConfig: true,
         priority: true,
         ticketFieldGroup: { select: { id: true, name: true } }
@@ -149,6 +242,7 @@ export async function GET(req: NextRequest) {
       type: true,
       multiSelect: true,
       apiConfig: true,
+      displayOnList: true,
       priority: true,
       ticketFieldGroup: {
         select: {
@@ -172,6 +266,7 @@ export async function GET(req: NextRequest) {
       ...def,
       required: def.requiredAtCreation,
       requiredAtCreation: undefined,
+      displayOnList: (def as any).displayOnList,
       apiConfig: config ? {
         dependsOnFieldKey: config.dependsOnFieldKey,
         dependencyParam: config.dependencyParam,

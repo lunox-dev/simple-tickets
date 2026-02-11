@@ -46,7 +46,8 @@ export async function POST(req: NextRequest) {
     apiConfig,
     ticketFieldGroupId,
     activeInCreate,
-    activeInRead
+    activeInRead,
+    displayOnList
   } = body as {
     label?: string
     key?: string
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
     ticketFieldGroupId?: number
     activeInCreate?: boolean
     activeInRead?: boolean
+    displayOnList?: boolean
   }
 
   if (typeof label !== 'string' || !label.trim()) {
@@ -86,6 +88,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'apiConfig is required for API fields' }, { status: 400 })
   }
 
+  // DisplayOnList Validation
+  if (displayOnList) {
+    if (type !== 'API_SELECT') {
+      return NextResponse.json({ error: 'DisplayOnList is only allowed for API Fetched fields (Dropdowns)' }, { status: 400 })
+    }
+    // Check dependency
+    if (apiConfig && apiConfig.dependsOnFieldKey) {
+      // Find parent field
+      const parent = await prisma.ticketFieldDefinition.findFirst({
+        where: { key: apiConfig.dependsOnFieldKey }
+      })
+      if (!parent) {
+        return NextResponse.json({ error: `Parent field ${apiConfig.dependsOnFieldKey} not found` }, { status: 400 })
+      }
+      if (!parent.displayOnList) {
+        return NextResponse.json({ error: `Parent field ${parent.label} must also have DisplayOnList enabled` }, { status: 400 })
+      }
+    }
+  }
+
   // 4. Create the custom field
   try {
     const field = await prisma.ticketFieldDefinition.create({
@@ -101,7 +123,8 @@ export async function POST(req: NextRequest) {
         apiConfig: apiConfig || undefined,
         ticketFieldGroupId: ticketFieldGroupId || null,
         activeInCreate: activeInCreate ?? true,
-        activeInRead: activeInRead ?? true
+        activeInRead: activeInRead ?? true,
+        displayOnList: displayOnList || false
       }
     })
     return NextResponse.json({ field }, { status: 201 })

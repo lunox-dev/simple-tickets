@@ -11,6 +11,7 @@ import { Search, CalendarIcon } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import type { FilterState, Status, Priority, FlatCategory, FlatEntity } from "./types"
+import { ApiSelect } from "@/components/ticket/common/api-select"
 
 interface FilterPanelProps {
   filters: FilterState
@@ -19,6 +20,7 @@ interface FilterPanelProps {
   priorities: Priority[]
   flatCategories: FlatCategory[]
   flatEntities: FlatEntity[]
+  customFieldDefinitions: any[] // Should define type properly but using any for now or imported type
   onFilterChange: () => void
 }
 
@@ -29,6 +31,7 @@ export function FilterPanel({
   priorities,
   flatCategories,
   flatEntities,
+  customFieldDefinitions = [],
   onFilterChange,
 }: FilterPanelProps) {
   const handleFilterChange = (change: Partial<FilterState>) => {
@@ -56,7 +59,9 @@ export function FilterPanel({
       fromDate: null,
       toDate: null,
       includeUserTeamsForTeams: false,
+      includeUserTeamsForTeams: false,
       includeUserTeamsForCreatedByTeams: false,
+      customFields: {}
     })
     onFilterChange()
   }
@@ -201,6 +206,47 @@ export function FilterPanel({
             ))}
           </div>
         </div>
+
+        {/* Custom Fields Filter */}
+        {customFieldDefinitions.length > 0 && (
+          <div className="space-y-6 pt-4 border-t">
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Custom Fields</Label>
+            {customFieldDefinitions.map(field => {
+              const val = (filters.customFields || {})[field.id] || ""
+
+              // For dependency logic in filters:
+              let depParam = undefined
+              let depValue = undefined
+              if (field.apiConfig?.dependsOnFieldKey) {
+                depParam = field.apiConfig.dependencyParam
+                const parent = customFieldDefinitions.find((f: any) => f.key === field.apiConfig?.dependsOnFieldKey)
+                if (parent) {
+                  depValue = (filters.customFields || {})[parent.id]
+                }
+              }
+
+              return (
+                <div key={field.id} className="space-y-2">
+                  <Label className="text-xs text-muted-foreground" htmlFor={`filter-field-${field.id}`}>{field.label}</Label>
+                  <ApiSelect
+                    fieldId={field.id}
+                    value={val}
+                    onChange={(v) => {
+                      const newVal = Array.isArray(v) ? v.join(',') : v
+                      const newCustom = { ...(filters.customFields || {}), [field.id]: newVal }
+                      if (!newVal) delete newCustom[field.id]
+                      setFilters(prev => ({ ...prev, customFields: newCustom }))
+                      onFilterChange()
+                    }}
+                    dependencyParam={depParam}
+                    dependencyValue={depValue}
+                  // Filtering doesn't usually require validation, so no 'required' passed
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* Date Range Filter */}
         <div className="space-y-3">

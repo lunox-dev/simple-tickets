@@ -54,6 +54,13 @@ interface TicketListItem {
   createdAt: string
   updatedAt: string
   unread: boolean
+  customFields?: Array<{
+    id: number
+    fieldDefinitionId: number
+    key: string
+    label: string
+    value: string
+  }>
 }
 
 interface Priority {

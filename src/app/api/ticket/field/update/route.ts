@@ -22,9 +22,29 @@ export async function PATCH(req: NextRequest) {
 
     // 2. Parse Payload
     const body = await req.json()
-    const { id, label, key, type, requiredAtCreation, multiSelect, apiConfig, ticketFieldGroupId, activeInCreate, activeInRead, priority } = body
+    const { id, label, key, type, requiredAtCreation, multiSelect, apiConfig, ticketFieldGroupId, activeInCreate, activeInRead, priority, displayOnList } = body
 
     if (!id) return NextResponse.json({ error: 'Field ID is required' }, { status: 400 })
+
+    // DisplayOnList Validation
+    if (displayOnList) {
+        if (type !== 'API_SELECT') {
+            return NextResponse.json({ error: 'DisplayOnList is only allowed for API Fetched fields (Dropdowns)' }, { status: 400 })
+        }
+        // Check dependency
+        if (apiConfig && apiConfig.dependsOnFieldKey) {
+            // Find parent field
+            const parent = await prisma.ticketFieldDefinition.findFirst({
+                where: { key: apiConfig.dependsOnFieldKey }
+            })
+            if (!parent) {
+                return NextResponse.json({ error: `Parent field ${apiConfig.dependsOnFieldKey} not found` }, { status: 400 })
+            }
+            if (!parent.displayOnList) {
+                return NextResponse.json({ error: `Parent field ${parent.label} must also have DisplayOnList enabled` }, { status: 400 })
+            }
+        }
+    }
 
     try {
         // 3. Update Field
@@ -40,7 +60,8 @@ export async function PATCH(req: NextRequest) {
                 ticketFieldGroupId,
                 activeInCreate,
                 activeInRead,
-                priority
+                priority,
+                displayOnList: displayOnList || false
             }
         })
 
