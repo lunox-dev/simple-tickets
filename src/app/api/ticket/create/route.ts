@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions'
 import { prisma } from '@/lib/prisma'
+import { uploadFileToS3 } from '@/lib/s3'
+import mime from 'mime-types'
 
 import { enqueueNotificationInit } from '@/lib/notification-queue'
 import { verifyPermission, handlePermissionError } from '@/lib/permission-error'
@@ -15,9 +17,14 @@ type FieldPayload = {
 
 type AttachmentPayload = {
   filePath: string
+  fileName?: string
   fileType?: string
   fileSize?: number
 }
+
+// Ensure body parser is disabled for FormData handling if needed ??? 
+// Next.js App Router handles FormData natively via request.formData() 
+// without needing config.api.bodyParser = false.
 
 export async function POST(req: NextRequest) {
   // 1) AUTH: session vs API-key
@@ -25,8 +32,53 @@ export async function POST(req: NextRequest) {
   const permSet = new Set<string>()
   let actorEntityId: number | null = null
 
-  // 2) Pull out the new required payload
-  const bodyJson = await req.json() as any
+  // 2) Parse Request (JSON or FormData)
+  let bodyJson: any = {}
+  let filesToUpload: { file: File, name: string, type: string, size: number }[] = []
+
+  const contentType = req.headers.get('content-type') || ''
+
+  if (contentType.includes('multipart/form-data')) {
+    const formData = await req.formData()
+
+    // Extract fields from FormData
+    // Expecting JSON string for complex objects if passed as string
+    // OR individual fields.
+    // The frontend sends a JSON body usually. 
+    // Adapting to FormData:
+    // We can expect a field 'data' containing the JSON payload
+    // AND 'files' (multiple) for attachments.
+
+    const dataStr = formData.get('data')
+    if (typeof dataStr === 'string') {
+      try {
+        bodyJson = JSON.parse(dataStr)
+      } catch (e) {
+        return NextResponse.json({ error: 'Invalid JSON in "data" field' }, { status: 400 })
+      }
+    }
+
+    // Collect files
+    const fileEntries = formData.getAll('files')
+    for (const f of fileEntries) {
+      if (f instanceof File) {
+        filesToUpload.push({
+          file: f,
+          name: f.name,
+          type: f.type,
+          size: f.size
+        })
+      }
+    }
+  } else {
+    // Legacy JSON mode
+    try {
+      bodyJson = await req.json()
+    } catch (e) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+  }
+
   const {
     title,
     body,
@@ -34,7 +86,7 @@ export async function POST(req: NextRequest) {
     assignto,
     status,
     priority,
-    attachments,
+    attachments, // Legacy attachment payloads (already uploaded)
     fields,
     userTeamEntityId,   // new
   } = bodyJson as {
@@ -74,8 +126,6 @@ export async function POST(req: NextRequest) {
     actingUT.userTeamPermissions.forEach((p: string) => permSet.add(p))
     actingUT.permissions.forEach((p: string) => permSet.add(p))
 
-
-
     try {
       verifyPermission(permSet, 'ticket:create', 'ticket')
     } catch (err) {
@@ -92,7 +142,7 @@ export async function POST(req: NextRequest) {
     actorEntityId = userTeamEntityId
 
   } else {
-    // — API-KEY FLOW: no userTeamEntityId expected
+    // — API-KEY FLOW: no userTeamEntityId expected (and NO FormData support for now unless we enable it)
     if (userTeamEntityId !== undefined) {
       return NextResponse.json({
         error: 'userTeamEntityId must not be provided when using API key'
@@ -140,7 +190,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ─── status permission check ────────────────────────────────────────────────
   // ─── status permission check ────────────────────────────────────────────────
   const canCreateStatusAny = permSet.has('ticket:create:status:any')
   const canCreateStatusSpecific = permSet.has(`ticket:create:status:${status}`)
@@ -226,6 +275,7 @@ export async function POST(req: NextRequest) {
         }
       })
 
+      // 1. Handle Legacy Attachments (Pre-uploaded)
       if (attachments) {
         for (const at of attachments) {
           const parts = at.filePath.split('/').pop()?.split('.') || []
@@ -234,7 +284,7 @@ export async function POST(req: NextRequest) {
             data: {
               ticketThreadId: thread.id,
               filePath: at.filePath,
-              fileName: parts.join('.'),
+              fileName: at.fileName || parts.join('.'),
               fileType: at.fileType ?? ext,
               ...(typeof at.fileSize === 'number'
                 ? { fileSize: at.fileSize }
@@ -244,21 +294,50 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      for (const f of fieldArr) {
-        // Enforce multiSelect logic
-        if (!f.value) continue; // skip empty?
+      // 2. Handle New Internal Uploads (FormData)
+      if (filesToUpload.length > 0) {
+        for (const fileItem of filesToUpload) {
+          const timestamp = Date.now()
+          const original = fileItem.name || 'upload'
+          const safeName = original.replace(/[^a-zA-Z0-9.-]/g, '_')
+          // PATH LOGIC: ticket/attachment/<ticketId>/internal/<timestamp>-<filename>
+          const key = `ticket/attachment/${ticket.id}/internal/${timestamp}-${safeName}`
 
-        // Check if multiple values are allowed for this fieldDef
+          const arrayBuffer = await fileItem.file.arrayBuffer()
+          const buffer = Buffer.from(arrayBuffer)
+          const mimeType = fileItem.type || mime.lookup(original) || 'application/octet-stream'
+
+          // Note: We are uploading inside the transaction block. 
+          // If upload fails, transaction rolls back? 
+          // No, upload is external side effect. If transaction fails later, file remains in S3 (orphan).
+          // If upload fails, we throw error, transaction rolls back.
+          // This creates a risk of orphaned files if DB commit fails after upload. 
+          // Acceptable for this scope, but cleaner to delete on rollback (hard to do).
+
+          await uploadFileToS3(buffer, key, mimeType)
+
+          const parts = original.split('.')
+          const ext = parts.length > 1 ? parts.pop() : ''
+
+          await tx.ticketThreadAttachment.create({
+            data: {
+              ticketThreadId: thread.id,
+              filePath: key, // Storing KEY here, not signed URL
+              fileName: original,
+              fileType: mimeType,
+              fileSize: fileItem.size
+            }
+          })
+        }
+      }
+
+      for (const f of fieldArr) {
+        if (!f.value) continue;
+
         const def = defs.find(d => d.id === f.fieldDefinitionId)
         if (def && !def.multiSelect) {
-          // Count occurrences
           const count = fieldArr.filter(item => item.fieldDefinitionId === f.fieldDefinitionId).length
           if (count > 1) {
-            // This will throw inside transaction, failing it.
-            // Better to validate outside transaction, but we only fetched defs partially.
-            // Let's rely on the previous loop check or just let it slide? 
-            // No, strict validation. 
-            // We'll throw an error to abort transaction
             throw new Error(`Field '${def.label}' does not accept multiple values.`)
           }
         }
@@ -275,7 +354,6 @@ export async function POST(req: NextRequest) {
       return { ticket, thread, event }
     })
 
-    // ─── enqueue notification for NEW_THREAD ───────────────────────────────────
     await enqueueNotificationInit(event.id)
 
     return NextResponse.json({ ticket, thread }, { status: 201 })
