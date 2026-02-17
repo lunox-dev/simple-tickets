@@ -8,6 +8,7 @@ import { verifyTicketAccess, TicketAccessForUserResponse } from '@/lib/access-ti
 import { handlePermissionError } from '@/lib/permission-error'
 import { verifyChangePermission, hasThreadCreatePermission } from '@/lib/access-ticket-change'
 import { getEntitiesForUser } from '@/lib/entity-list'
+import { getSignedUrl } from '@/lib/s3'
 
 // Helper to format a Team/UserTeam entity into a display object
 function formatEntity(e: {
@@ -399,13 +400,18 @@ export async function GET(req: NextRequest) {
   const activityLog: Entry[] = []
 
   for (const t of threads) {
+    const signedAttachments = t.attachments?.map((a) => ({
+      ...a,
+      url: getSignedUrl(a.filePath)
+    })) || []
+
     activityLog.push({
       type: 'THREAD',
       id: t.id,
       at: t.createdAt,
       body: t.body,
       createdBy: formatEntity(t.createdBy),
-      attachments: t.attachments,
+      attachments: signedAttachments,
       read: t.notificationEvent ? (readMap.get(t.notificationEvent.id) ?? false) : false
     })
   }

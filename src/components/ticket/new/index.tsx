@@ -25,7 +25,6 @@ import {
 import {
   Loader2,
   AlertCircle,
-  UploadCloud,
   X,
   Link,
   Check,
@@ -107,17 +106,6 @@ interface CustomFieldValue {
   value: string
 }
 
-interface AttachmentFile {
-  id: string
-  name: string
-  url: string
-  size?: number
-  type: "file" | "url"
-  uploading?: boolean
-  error?: string
-  file?: File
-}
-
 export default function NewTicketForm() {
   const router = useRouter()
   const [title, setTitle] = useState("")
@@ -135,15 +123,16 @@ export default function NewTicketForm() {
   const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([])
   const [customFieldValues, setCustomFieldValues] = useState<Record<number, string>>({})
   const [customFieldErrors, setCustomFieldErrors] = useState<Record<number, string>>({})
-  const [attachments, setAttachments] = useState<AttachmentFile[]>([])
-
-  const [assignOpen, setAssignOpen] = useState(false)
-  const [assignSearch, setAssignSearch] = useState("")
+  const [files, setFiles] = useState<File[]>([])
 
   // URL Dialog state
   const [urlDialogOpen, setUrlDialogOpen] = useState(false)
   const [urlName, setUrlName] = useState("")
   const [urlValue, setUrlValue] = useState("")
+  const [urlAttachments, setUrlAttachments] = useState<{ name: string; url: string }[]>([])
+
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [assignSearch, setAssignSearch] = useState("")
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -244,26 +233,6 @@ export default function NewTicketForm() {
     [customFields],
   )
 
-  // Upload file to attachment endpoint
-  const uploadFile = async (file: File): Promise<string> => {
-    const formData = new FormData()
-    formData.append("file", file)
-    formData.append("path", "ticket-attachments")
-
-    const response = await fetch("/api/attachment/upload", {
-      method: "POST",
-      body: formData,
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || "Upload failed")
-    }
-
-    const data = await response.json()
-    return data.filePath
-  }
-
   // Fetch initial data
   useEffect(() => {
     const fetchData = async () => {
@@ -334,60 +303,27 @@ export default function NewTicketForm() {
     debouncedValidation(fieldId, value)
   }
 
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
-      const newFiles = Array.from(event.target.files).map((file) => ({
-        id: Math.random().toString(36).substring(2, 15),
-        name: file.name,
-        url: "",
-        size: file.size,
-        type: "file" as const,
-        uploading: true,
-        file,
-      }))
-
-      setAttachments((prev) => [...prev, ...newFiles])
-
-      for (const attachment of newFiles) {
-        try {
-          const url = await uploadFile(attachment.file!)
-          setAttachments((prev) => prev.map((att) => (att.id === attachment.id ? { ...att, url, uploading: false } : att)))
-        } catch (error) {
-          setAttachments((prev) =>
-            prev.map((att) =>
-              att.id === attachment.id
-                ? { ...att, uploading: false, error: error instanceof Error ? error.message : "Upload failed" }
-                : att,
-            ),
-          )
-        }
-      }
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setFiles(prev => [...prev, ...Array.from(e.target.files!)])
     }
+  }
+
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index))
   }
 
   const handleAddUrl = () => {
-    if (!urlName.trim() || !urlValue.trim()) return
-
-    try {
-      new URL(urlValue)
-      const newAttachment: AttachmentFile = {
-        id: Math.random().toString(36).substring(2, 15),
-        name: urlName.trim(),
-        url: urlValue.trim(),
-        type: "url",
-      }
-
-      setAttachments((prev) => [...prev, newAttachment])
-      setUrlName("")
-      setUrlValue("")
-      setUrlDialogOpen(false)
-    } catch {
-      setError("Please enter a valid URL")
-    }
+    if (!urlName || !urlValue) return
+    setUrlAttachments(prev => [...prev, { name: urlName, url: urlValue }])
+    setUrlName("")
+    setUrlValue("")
+    setUrlDialogOpen(false)
   }
 
-  const removeAttachment = (idToRemove: string) => {
-    setAttachments((prev) => prev.filter((att) => att.id !== idToRemove))
+  const removeUrlAttachment = (index: number) => {
+    setUrlAttachments(prev => prev.filter((_, i) => i !== index))
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -415,28 +351,6 @@ export default function NewTicketForm() {
       return
     }
 
-    if (!selectedStatus) {
-      setError("Please select a status.")
-      return
-    }
-
-    if (!selectedPriority) {
-      setError("Please select a priority.")
-      return
-    }
-
-    const uploadingFiles = attachments.filter((att) => att.uploading)
-    if (uploadingFiles.length > 0) {
-      setError("Please wait for all files to finish uploading.")
-      return
-    }
-
-    const failedUploads = attachments.filter((att) => att.error)
-    if (failedUploads.length > 0) {
-      setError("Some files failed to upload. Please remove them and try again.")
-      return
-    }
-
     for (const field of customFields) {
       if (field.required && !customFieldValues[field.id]?.trim()) {
         setError(`Field "${field.label}" is required.`)
@@ -450,38 +364,34 @@ export default function NewTicketForm() {
 
     setIsLoading(true)
 
-    const payloadFields: CustomFieldValue[] = Object.entries(customFieldValues)
-      .filter(([_, value]) => value.trim() !== "")
-      .map(([id, value]) => ({
-        fieldDefinitionId: Number.parseInt(id, 10),
-        value,
-      }))
-
-    const attachmentPayload = attachments
-      .filter((att) => att.url && !att.error)
-      .map((att) => ({
-        filePath: att.url,
-        ...(att.size && { fileSize: att.size }),
-        ...(att.file && { fileType: att.file.type }),
-      }))
-
-    const ticketData = {
-      title,
-      body: typeof body === "string" ? body : ((body as any)?.toString?.() ?? ""),
-      category: Number.parseInt(selectedCategory, 10),
-      assignto: Number.parseInt(selectedEntity, 10),
-      status: Number.parseInt(selectedStatus, 10),
-      priority: Number.parseInt(selectedPriority, 10),
-      fields: payloadFields,
-      attachments: attachmentPayload,
-      userTeamEntityId: session?.user?.actingAs?.userTeamEntityId,
-    }
-
     try {
+      const payload: any = {
+        title,
+        body: typeof body === "string" ? body : ((body as any)?.toString?.() ?? ""),
+        category: Number.parseInt(selectedCategory, 10),
+        assignto: Number.parseInt(selectedEntity, 10),
+        status: selectedStatus ? Number.parseInt(selectedStatus, 10) : 1,
+        priority: selectedPriority ? Number.parseInt(selectedPriority, 10) : 2,
+        fields: Object.entries(customFieldValues)
+          .filter(([_, value]) => value && value.trim() !== "")
+          .map(([id, value]) => ({
+            fieldDefinitionId: Number.parseInt(id, 10),
+            value,
+          })),
+        attachments: urlAttachments.map(u => ({ filePath: u.url, fileName: u.name, fileType: 'url' })),
+        userTeamEntityId: session.user.actingAs.userTeamEntityId,
+      }
+
+      const formData = new FormData()
+      formData.append('data', JSON.stringify(payload))
+
+      files.forEach((f) => {
+        formData.append('files', f)
+      })
+
       const response = await fetch("/api/ticket/create", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(ticketData),
+        body: formData,
       })
 
       if (!response.ok) {
@@ -492,6 +402,7 @@ export default function NewTicketForm() {
       const result = await response.json()
       setSuccessMessage(`Ticket created successfully! Ticket ID: ${result.ticket.id}`)
 
+      // Reset
       setTitle("")
       setBody("")
       setSelectedCategory("")
@@ -500,13 +411,18 @@ export default function NewTicketForm() {
       setSelectedPriority("")
       setCustomFields([])
       setCustomFieldValues({})
-      setAttachments([])
+      setFiles([])
+
+      // Navigate
+      router.push(`/ticket/${result.ticket.id}`)
+
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unknown error occurred")
     } finally {
       setIsLoading(false)
     }
   }
+
 
   const filteredEntities = useMemo(() => {
     if (!assignSearch) return flatEntities
@@ -526,32 +442,7 @@ export default function NewTicketForm() {
       .slice(0, 2)
   }
 
-  // ... inside NewTicketForm or outside? Inside to access state.
-  // Actually, helper function inside render is okay, or plain map.
-  // But I need access to handleCustomFieldChange and values.
-
   const renderField = (field: CustomFieldDefinition) => {
-    // Determine value: string or string[]? 
-    // customFieldValues is Record<number, string>.
-    // For multiSelect, we might store JSON string or need to change state type?
-    // "value: string" in TicketFieldValue suggests we store ONE string per row.
-    // In Frontend State, for multiSelect, we should probably store an array?
-    // But my state definition is: `const [customFieldValues, setCustomFieldValues] = useState<Record<number, string>>({})`
-    // I should update the state type to handle arrays?
-    // Or just serialize to CSV/JSON for local state and parse it?
-    // The ApiSelect expects `value: string | string[]`.
-    // Let's assume for now we store as CSV in the string state for simplicity?
-    // No, that's messy.
-    // Let's change state type in a separate mutation or cast it here?
-    // The interface `CustomFieldValue` for payload is fine (serialized).
-    // But React state... 
-    // Let's cast it here: 
-    // Raw value from state is string.
-    // If field.multiSelect, we parse it? 
-    // Wait, `value` in state is initialized to "".
-    // If I change ApiSelect to return array, I need to store array.
-    // Let's just handle it.
-
     const val = customFieldValues[field.id]
     const valParsed = field.multiSelect && val ? val.split(',') : (field.multiSelect ? [] : val)
 
@@ -561,14 +452,8 @@ export default function NewTicketForm() {
 
     if (field.apiConfig?.dependsOnFieldKey) {
       depParam = field.apiConfig.dependencyParam
-      // Find parent field by KEY (assuming field definitions have unique keys or we search by key)
-      // Wait, field definition has 'key'? The schema says it has.
-      // I need to check if 'key' is in the fetch list.
-      // Step 544 shows 'key: true' is selected in `api/ticket/field/list`.
-      // So I can find parent field.
       const parentField = customFields.find(f => f.key === field.apiConfig?.dependsOnFieldKey)
       if (parentField) {
-        // Get value of parent from state
         depValue = customFieldValues[parentField.id]
       }
     }
@@ -585,17 +470,6 @@ export default function NewTicketForm() {
             fieldId={field.id}
             value={valParsed}
             onChange={(v) => {
-              // Store as comma-joined string? Or JSON?
-              // Ticket create API expects arrays of { fieldDefinitionId, value }.
-              // If I store "A,B", backend receives one row "A,B".
-              // Backend expects multiple rows!
-              // My update to backend `ticket/create` handles `fieldArr`.
-              // Frontend needs to send `fields: [{id:1, value:"A"}, {id:1, value:"B"}]`.
-              // So I need state to support Array.
-              // I will update interface `customFieldValues` to `Record<number, string | string[]>`.
-
-              // But I can't easily change the *entire* file's types in one Replace block without conflict.
-              // Hack: Store as array in state (any), cast when needed.
               handleCustomFieldChange(field.id, v as any)
             }}
             multiSelect={field.multiSelect}
@@ -796,57 +670,78 @@ export default function NewTicketForm() {
                         </Dialog>
                       </div>
 
+                      {/* URL Attachment List */}
+                      {urlAttachments.length > 0 && (
+                        <div className="space-y-2 mt-4 mb-4">
+                          {urlAttachments.map((att, i) => (
+                            <div
+                              key={i}
+                              className="flex items-center justify-between p-3 rounded-lg bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/20 group"
+                            >
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <Link className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium truncate text-blue-700 dark:text-blue-300">{att.name}</p>
+                                  <p className="text-xs text-blue-600/70 dark:text-blue-400/70 truncate">
+                                    {att.url}
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeUrlAttachment(i)}
+                                className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                              >
+                                <X className="h-4 w-4 text-blue-500 hover:text-blue-700" />
+                                <span className="sr-only">Remove</span>
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       {/* File Upload */}
                       <div className="mt-4">
-                        <input
-                          type="file"
+                        <Label htmlFor="file-upload" className="sr-only">Upload files</Label>
+                        <Input
                           id="file-upload"
+                          type="file"
                           multiple
-                          onChange={handleFileChange}
-                          className="hidden"
-                          accept="*/*"
+                          onChange={handleFileSelect}
+                          className="cursor-pointer"
                         />
-                        <label
-                          htmlFor="file-upload"
-                          className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border/60 rounded-lg hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer group"
-                        >
-                          <UploadCloud className="h-8 w-8 text-muted-foreground group-hover:text-primary/70 mb-2 transition-colors" />
-                          <p className="text-sm font-medium text-foreground">Drop files here or click to select</p>
-                          <p className="text-xs text-muted-foreground mt-1">PNG, JPG, PDF and other formats supported</p>
-                        </label>
+                        <p className="text-xs text-muted-foreground mt-1">PNG, JPG, PDF supported</p>
                       </div>
 
                       {/* Attachment List */}
-                      {attachments.length > 0 && (
+                      {files.length > 0 && (
                         <div className="space-y-2 mt-4">
-                          {attachments.map((attachment) => (
+                          {files.map((file, i) => (
                             <div
-                              key={attachment.id}
+                              key={i}
                               className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/40 group"
                             >
                               <div className="flex items-center gap-3 min-w-0 flex-1">
                                 <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-medium truncate">{attachment.name}</p>
+                                  <p className="text-sm font-medium truncate">{file.name}</p>
                                   <p className="text-xs text-muted-foreground">
-                                    {attachment.type === "file" && attachment.size
-                                      ? `${(attachment.size / 1024).toFixed(1)} KB`
-                                      : "Link"}
+                                    {(file.size / 1024).toFixed(1)} KB
                                   </p>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2 flex-shrink-0">
-                                {attachment.uploading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-                                {attachment.error && <span className="text-xs text-destructive font-medium">Error</span>}
-                                {!attachment.uploading && !attachment.error && <Check className="h-4 w-4 text-green-600" />}
-                                <button
-                                  type="button"
-                                  onClick={() => removeAttachment(attachment.id)}
-                                  className="p-1 hover:bg-muted rounded transition-colors opacity-0 group-hover:opacity-100"
-                                >
-                                  <X className="h-4 w-4 text-muted-foreground" />
-                                </button>
-                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeFile(i)}
+                                className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <X className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                                <span className="sr-only">Remove</span>
+                              </Button>
                             </div>
                           ))}
                         </div>
@@ -1034,6 +929,6 @@ export default function NewTicketForm() {
           </div>
         </form>
       </main>
-    </div >
+    </div>
   )
 }
