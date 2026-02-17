@@ -97,7 +97,25 @@ export default function TicketConversation({ activities, lastReadEvent, ticketId
     return acc
   }, {}) || {}
 
+  // Sort activities chronologically
+  const sortedActivities = [...activities].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
 
+  // Calculate Last Read Index
+  const lastReadIndex = lastReadEvent
+    ? sortedActivities.findIndex(a => a.type === lastReadEvent.type && a.id === lastReadEvent.id)
+    : -1
+
+  const isNew = (entry: ActivityLogEntry) => {
+    // If no last read event, everything is new
+    if (!lastReadEvent) return true
+
+    const entryIndex = sortedActivities.indexOf(entry)
+
+    // If entry is found and is AFTER the last read index, it's new
+    if (entryIndex !== -1 && entryIndex > lastReadIndex) return true
+
+    return false
+  }
 
   const getInitials = (name: string) => {
     return name
@@ -205,9 +223,11 @@ export default function TicketConversation({ activities, lastReadEvent, ticketId
       )
     }
 
+    const isNewMessage = isNew(entry)
+
     return (
       <Card
-        className={`bg-card shadow-sm border-0 ring-1 ring-border transition-all duration-200 ${!entry.read ? "bg-primary/5 ring-primary/20" : ""
+        className={`bg-card shadow-sm border-0 ring-1 ring-border transition-all duration-200 ${isNewMessage ? "bg-primary/5 ring-primary/20" : ""
           } ${isLastRead(entry) ? "ring-green-500/50 ring-2" : ""}`}
       >
         <CardContent className="p-6">
@@ -222,7 +242,7 @@ export default function TicketConversation({ activities, lastReadEvent, ticketId
               <div>
                 <div className="flex items-center space-x-2">
                   <span className="font-semibold text-foreground">{entry.createdBy?.name}</span>
-                  {!entry.read && (
+                  {isNewMessage && (
                     <Badge variant="secondary" className="text-[10px] h-5 px-1.5 bg-primary/10 text-primary font-medium">
                       New
                     </Badge>
@@ -379,8 +399,7 @@ export default function TicketConversation({ activities, lastReadEvent, ticketId
     )
   }
 
-  // Sort activities chronologically
-  const sortedActivities = [...activities].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+
 
   // Helper to group activities
   const groupActivities = (activities: ActivityLogEntry[]) => {
