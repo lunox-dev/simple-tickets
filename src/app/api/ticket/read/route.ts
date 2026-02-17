@@ -405,6 +405,8 @@ export async function GET(req: NextRequest) {
       url: getSignedUrl(a.filePath)
     })) || []
 
+    const originalRead = t.notificationEvent ? (readMap.get(t.notificationEvent.id) ?? false) : false
+
     activityLog.push({
       type: 'THREAD',
       id: t.id,
@@ -412,11 +414,16 @@ export async function GET(req: NextRequest) {
       body: t.body,
       createdBy: formatEntity(t.createdBy),
       attachments: signedAttachments,
-      read: t.notificationEvent ? (readMap.get(t.notificationEvent.id) ?? false) : false
+      // Optimistically mark as read if it has an event (user is viewing it now)
+      // Otherwise keep default (likely false for own actions without notifications, or true if we want)
+      // Existing logic used 'false' if no event.
+      read: t.notificationEvent ? true : false,
+      _originalRead: originalRead
     })
   }
 
   for (const a of assigns) {
+    const originalRead = a.notificationEvent ? (readMap.get(a.notificationEvent.id) ?? false) : false
     activityLog.push({
       type: 'ASSIGN_CHANGE',
       id: a.id,
@@ -424,11 +431,13 @@ export async function GET(req: NextRequest) {
       from: a.assignedFrom ? formatEntity(a.assignedFrom) : null,
       to: a.assignedTo ? formatEntity(a.assignedTo) : null,
       by: a.assignedBy ? formatEntity(a.assignedBy) : null,
-      read: a.notificationEvent ? (readMap.get(a.notificationEvent.id) ?? false) : false
+      read: a.notificationEvent ? true : false,
+      _originalRead: originalRead
     })
   }
 
   for (const p of prios) {
+    const originalRead = p.notificationEvent ? (readMap.get(p.notificationEvent.id) ?? false) : false
     activityLog.push({
       type: 'PRIORITY_CHANGE',
       id: p.id,
@@ -436,11 +445,13 @@ export async function GET(req: NextRequest) {
       from: p.priorityFrom,
       to: p.priorityTo,
       by: formatEntity(p.changedBy),
-      read: p.notificationEvent ? (readMap.get(p.notificationEvent.id) ?? false) : false
+      read: p.notificationEvent ? true : false,
+      _originalRead: originalRead
     })
   }
 
   for (const s of stats) {
+    const originalRead = s.notificationEvent ? (readMap.get(s.notificationEvent.id) ?? false) : false
     activityLog.push({
       type: 'STATUS_CHANGE',
       id: s.id,
@@ -448,11 +459,13 @@ export async function GET(req: NextRequest) {
       from: s.statusFrom,
       to: s.statusTo,
       by: formatEntity(s.changedBy),
-      read: s.notificationEvent ? (readMap.get(s.notificationEvent.id) ?? false) : false
+      read: s.notificationEvent ? true : false,
+      _originalRead: originalRead
     })
   }
 
   for (const c of cats) {
+    const originalRead = c.notificationEvent ? (readMap.get(c.notificationEvent.id) ?? false) : false
     activityLog.push({
       type: 'CATEGORY_CHANGE',
       id: c.id,
@@ -460,11 +473,13 @@ export async function GET(req: NextRequest) {
       from: c.categoryFrom,
       to: c.categoryTo,
       by: formatEntity(c.changedBy),
-      read: c.notificationEvent ? (readMap.get(c.notificationEvent.id) ?? false) : false
+      read: c.notificationEvent ? true : false,
+      _originalRead: originalRead
     })
   }
 
   for (const cf of customFields) {
+    const originalRead = cf.notificationEvent ? (readMap.get(cf.notificationEvent.id) ?? false) : false
     activityLog.push({
       type: 'CUSTOM_FIELD_CHANGE',
       id: cf.id,
@@ -476,15 +491,16 @@ export async function GET(req: NextRequest) {
       to: cf.valueTo,
       context: cf.context,
       by: formatEntity(cf.changedBy),
-      read: cf.notificationEvent ? (readMap.get(cf.notificationEvent.id) ?? false) : false
+      read: cf.notificationEvent ? true : false,
+      _originalRead: originalRead
     })
   }
 
   // 7) chronological sort
   activityLog.sort((a, b) => a.at.getTime() - b.at.getTime())
 
-  // 8) identify last-read
-  const readEntries = activityLog.filter(e => e.read)
+  // 8) identify last-read (using _originalRead to reflect DB state before this view)
+  const readEntries = activityLog.filter(e => e._originalRead)
   const lastRead = readEntries.length
     ? readEntries.reduce((prev, curr) => (curr.at > prev.at ? curr : prev))
     : null
