@@ -1,5 +1,7 @@
 // src/notifications/send.ts
 import nodemailer from 'nodemailer'
+import https from 'https'
+
 
 const EMAIL_PROTOCOL = process.env.EMAIL_PROTOCOL || 'SMTP'
 const EMAIL_FROM = process.env.EMAIL_FROM!
@@ -51,8 +53,6 @@ export async function sendEmail(
   // POSTAL API
   // =========================
   if (EMAIL_PROTOCOL === 'API/POSTAL') {
-
-
     const payload = {
       from: EMAIL_FROM,
       to: [to],
@@ -63,18 +63,23 @@ export async function sendEmail(
     }
 
     try {
+      // create an HTTPS agent for internal TLS handling
+      const agent = new https.Agent({
+        rejectUnauthorized: false, // ignore cert hostname mismatch
+        minVersion: 'TLSv1.2'      // force TLS 1.2 if server requires it
+      })
+
       const response = await fetch(process.env.EMAIL_API_ENDPOINT!, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Server-API-Key': process.env.EMAIL_API_KEY!
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        agent // pass the custom agent here
       })
 
       const result = await response.json()
-
-
 
       if (result.status !== 'success') {
         console.error(`[sendEmail] Postal API error:`, result)
