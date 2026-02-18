@@ -1,16 +1,6 @@
-// src/app/api/auth/send-email-otp/route.ts
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import nodemailer from 'nodemailer'
-
-const transport = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT),
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-})
+import { sendEmail } from '@/notifications/send'
 
 export async function POST(req: Request) {
   const { email } = await req.json()
@@ -27,12 +17,11 @@ export async function POST(req: Request) {
     data: { userId: user.id, otp, expiresAt },
   })
 
-  await transport.sendMail({
-    from: process.env.SMTP_FROM,
-    to: email,
-    subject: 'Your Simple Tickets login code',
-    text: `Your code is ${otp}. It expires in 5 minutes.`,
-  })
+  await sendEmail(
+    email,
+    'Your Simple Tickets login code',
+    `Your code is ${otp}. It expires in 5 minutes.`
+  )
 
   return NextResponse.json({ ok: true })
 }
