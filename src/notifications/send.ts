@@ -94,3 +94,31 @@ export async function sendEmail(
 
   throw new Error(`Unknown EMAIL_PROTOCOL: ${EMAIL_PROTOCOL}`)
 }
+
+export async function sendSMS(to: string, text: string) {
+  const phone = to.replace(/^\+/, '') // remove leading +
+  const payload = {
+    data: text,
+    phoneNumber: phone,
+    sIDCode: process.env.SMS_ID_CODE!,
+    userName: process.env.SMS_USER!,
+    password: process.env.SMS_PASS!
+  }
+  console.log(`[sendSMS] Sending SMS to: ${phone}, payload:`, payload)
+  try {
+    const response = await fetch(process.env.SMS_HOST!, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    const responseBody = await response.text()
+    console.log(`[sendSMS] SMS response status: ${response.status}, body:`, responseBody)
+    return responseBody
+  } catch (err: any) {
+    // Check for undici connection timeout errors (common in Node 18+ with fetch)
+    if (err.code === 'UND_ERR_CONNECT_TIMEOUT' || err.cause?.code === 'UND_ERR_CONNECT_TIMEOUT') {
+      console.error(`[sendSMS] Connection timeout to SMS gateway (${process.env.SMS_HOST}). Are you connected to the VPN?`)
+    }
+    throw err
+  }
+}
