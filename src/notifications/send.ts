@@ -77,7 +77,7 @@ export async function sendEmail(
         },
         body: JSON.stringify(payload),
         agent // pass the custom agent here
-      })
+      } as any)
 
       const result = await response.json()
 
